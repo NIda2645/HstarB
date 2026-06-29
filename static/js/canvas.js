@@ -253,7 +253,9 @@ const activeCanvasTaskPolls = new Set();
 let hoveredConnectionId = '';
 let lastMouseBoard = {x: 0, y: 0};
 let undoStack = [];
-const UNDO_MAX = 30;
+let redoStack = [];
+const UNDO_MAX = 10;
+const SOFTWARE_SHORTCUT_STORAGE_KEY = 'hstar.software.shortcuts';
 const cascadeRunningIds = new Set();
 const cascadeStopIds = new Set();
 const cascadeSerialIds = new Set(); // 记录以串行循环模式启动的运行，用于停止按钮
@@ -1624,6 +1626,7 @@ async function createCanvas(){
         canvas.logs = canvas.logs || [];
         nodes = canvas.nodes || [];
         connections = canvas.connections || [];
+        resetCanvasHistory();
         viewport = localViewportForCanvas(canvas.id, canvas.viewport || {x:0, y:0, scale:1});
         canvas.viewport = {...viewport};
         resetTransientRunState(nodes);
@@ -1772,6 +1775,7 @@ async function openCanvas(id){
         canvas.logs = canvas.logs || [];
         nodes = canvas.nodes || [];
         connections = canvas.connections || [];
+        resetCanvasHistory();
         viewport = localViewportForCanvas(canvas.id, canvas.viewport || {x:0, y:0, scale:1});
         canvas.viewport = {...viewport};
         lastCanvasUpdatedAt = Number(canvas.updated_at || 0);
@@ -1813,6 +1817,7 @@ function applyRemoteCanvasData(remote){
         canvas.logs = canvas.logs || [];
         nodes = canvas.nodes || [];
         connections = canvas.connections || [];
+        resetCanvasHistory();
         viewport = localViewport;
         canvas.viewport = {...viewport};
         lastCanvasUpdatedAt = Number(canvas.updated_at || Date.now());
@@ -15507,19 +15512,90 @@ function connectSelectionToGenerator(kind, genId){
     syncGeneratorInputs();
 }
 
+function resetCanvasHistory(){
+    undoStack = [];
+    redoStack = [];
+}
+function canvasHistorySnapshot(){
+    return {
+        canvasId:canvas?.id || '',
+        nodes:JSON.parse(JSON.stringify(serializableCanvasNodes())),
+        connections:JSON.parse(JSON.stringify(connections)),
+        viewport:JSON.parse(JSON.stringify(viewport || {x:0, y:0, scale:1})),
+        selectedIds:[...selected]
+    };
+}
+function pushHistorySnapshot(stack, state){
+    if(!state?.canvasId || state.canvasId !== canvas?.id) return;
+    stack.push(state);
+    if(stack.length > UNDO_MAX) stack.shift();
+}
+function applyCanvasHistoryState(state){
+    if(!canvas || !state || state.canvasId !== canvas?.id) return false;
+    nodes = JSON.parse(JSON.stringify(state.nodes || []));
+    connections = JSON.parse(JSON.stringify(state.connections || []));
+    viewport = {...(state.viewport || viewport || {x:0, y:0, scale:1})};
+    canvas.nodes = nodes;
+    canvas.connections = connections;
+    canvas.viewport = {...viewport};
+    selected = new Set((state.selectedIds || []).filter(id => nodes.some(node => node.id === id)));
+    sanitizeConnections();
+    applyViewport();
+    render();
+    scheduleSave();
+    return true;
+}
 function pushUndo(){
     if(!canvas) return;
-    undoStack.push({nodes:JSON.parse(JSON.stringify(serializableCanvasNodes())), connections:JSON.parse(JSON.stringify(connections))});
-    if(undoStack.length > UNDO_MAX) undoStack.shift();
+    pushHistorySnapshot(undoStack, canvasHistorySnapshot());
+    redoStack = [];
 }
 function performUndo(){
     if(!canvas || !undoStack.length) return;
     const state = undoStack.pop();
-    nodes = state.nodes;
-    connections = state.connections;
-    selected.clear();
-    render();
-    scheduleSave();
+    if(!state || state.canvasId !== canvas?.id) return resetCanvasHistory();
+    pushHistorySnapshot(redoStack, canvasHistorySnapshot());
+    applyCanvasHistoryState(state);
+}
+function performRedo(){
+    if(!canvas || !redoStack.length) return;
+    const state = redoStack.pop();
+    if(!state || state.canvasId !== canvas?.id) return resetCanvasHistory();
+    pushHistorySnapshot(undoStack, canvasHistorySnapshot());
+    applyCanvasHistoryState(state);
+}
+function normalizeShortcutForMatch(value){
+    const parts = String(value || '').split('+').map(part => part.trim()).filter(Boolean);
+    const mods = {ctrl:false, alt:false, shift:false, meta:false};
+    let key = '';
+    parts.forEach(part => {
+        const lower = part.toLowerCase();
+        if(lower === 'ctrl' || lower === 'control') mods.ctrl = true;
+        else if(lower === 'alt') mods.alt = true;
+        else if(lower === 'shift') mods.shift = true;
+        else if(lower === 'meta' || lower === 'cmd' || lower === 'win') mods.meta = true;
+        else key = lower;
+    });
+    return {mods, key};
+}
+function shortcutSettings(){
+    const defaults = {undo:{accelerator:'Ctrl+Z'}, redo:{accelerator:'Ctrl+Shift+Z'}};
+    try {
+        const stored = JSON.parse(localStorage.getItem(SOFTWARE_SHORTCUT_STORAGE_KEY) || '{}');
+        return {...defaults, ...(stored && typeof stored === 'object' ? stored : {})};
+    } catch(e) {
+        return defaults;
+    }
+}
+function matchShortcutEvent(event, action){
+    const accelerator = shortcutSettings()[action]?.accelerator || '';
+    const parsed = normalizeShortcutForMatch(accelerator);
+    if(!parsed.key) return false;
+    const eventKey = String(event.key || '').toLowerCase();
+    return parsed.key === eventKey
+        && parsed.mods.ctrl === Boolean(event.ctrlKey || event.metaKey)
+        && parsed.mods.alt === Boolean(event.altKey)
+        && parsed.mods.shift === Boolean(event.shiftKey);
 }
 function cloneNode(n, dx, dy){
     const copy = JSON.parse(JSON.stringify(serializableCanvasNode(n)));
@@ -16575,6 +16651,18 @@ window.addEventListener('keydown', e => {
         return;
     }
     if(e.key === 'Escape' && outputLightbox.classList.contains('open')) { closeOutputLightbox(); return; }
+    if(!isEditableTarget(e.target) && matchShortcutEvent(e, 'undo')){
+        if(e.repeat) return;
+        e.preventDefault();
+        performUndo();
+        return;
+    }
+    if(!isEditableTarget(e.target) && matchShortcutEvent(e, 'redo')){
+        if(e.repeat) return;
+        e.preventDefault();
+        performRedo();
+        return;
+    }
     if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') { e.preventDefault(); groupSelectedImages(); }
     if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
         // 在输入框/可编辑元素里时，让浏览器原生 Ctrl+C 工作

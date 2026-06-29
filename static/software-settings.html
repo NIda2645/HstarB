@@ -141,10 +141,11 @@
         const aboutVersion = document.getElementById('aboutVersion');
         const SHORTCUT_STORAGE_KEY = 'hstar.software.shortcuts';
         const DEFAULT_SHORTCUTS = Object.freeze({
+            undo:{label:'撤销', accelerator:'Ctrl+Z'},
             copy:{label:'复制', accelerator:'Ctrl+C'},
             paste:{label:'粘贴', accelerator:'Ctrl+V'},
             cut:{label:'剪切', accelerator:'Ctrl+X'},
-            redo:{label:'重做', accelerator:'Ctrl+Y'},
+            redo:{label:'重做', accelerator:'Ctrl+Shift+Z'},
             selectAll:{label:'全选', accelerator:'Ctrl+A'}
         });
         let shortcutState = {};
@@ -153,8 +154,11 @@
             return Object.fromEntries(Object.entries(shortcuts || {}).map(([key, item]) => [key, {...item}]));
         }
         function sanitizeShortcuts(shortcuts){
-            const next = cloneShortcuts(shortcuts || {});
-            delete next.undo;
+            const next = cloneShortcuts(DEFAULT_SHORTCUTS);
+            Object.entries(shortcuts || {}).forEach(([key, item]) => {
+                if(!next[key] || !item || typeof item !== 'object') return;
+                next[key] = {...next[key], accelerator:normalizeShortcut(item.accelerator || next[key].accelerator)};
+            });
             return next;
         }
 
@@ -257,7 +261,7 @@
             const mods = [];
             if(event.ctrlKey || event.metaKey) mods.push('Ctrl');
             if(event.altKey) mods.push('Alt');
-            if(event.shiftKey && String(key).length > 1) mods.push('Shift');
+            if(event.shiftKey) mods.push('Shift');
             let normalizedKey = key === ' ' ? 'Space' : key;
             if(normalizedKey === '+') normalizedKey = '+';
             else if(normalizedKey.length === 1) normalizedKey = normalizedKey.toUpperCase();
@@ -295,6 +299,9 @@
                 });
             });
         }
+        function persistShortcutsLocal(shortcuts){
+            localStorage.setItem(SHORTCUT_STORAGE_KEY, JSON.stringify(sanitizeShortcuts(shortcuts)));
+        }
         async function loadShortcuts(){
             const api = desktopApi();
             if(!api?.getShortcuts){
@@ -306,6 +313,7 @@
             }
             try {
                 renderShortcuts(await api.getShortcuts());
+                persistShortcutsLocal(shortcutState);
             } catch(e) {
                 setShortcutStatus(e.message || '快捷键读取失败。', 'err');
             }
@@ -315,7 +323,7 @@
             if(!api?.saveShortcuts){
                 try {
                     shortcutState = sanitizeShortcuts(shortcutState);
-                    localStorage.setItem(SHORTCUT_STORAGE_KEY, JSON.stringify(shortcutState));
+                    persistShortcutsLocal(shortcutState);
                     renderShortcuts(cloneShortcuts(shortcutState));
                     setShortcutStatus('快捷键已保存。', 'ok');
                 } catch(e) {
@@ -325,6 +333,7 @@
             }
             try {
                 renderShortcuts(await api.saveShortcuts(sanitizeShortcuts(shortcutState)));
+                persistShortcutsLocal(shortcutState);
                 setShortcutStatus('快捷键已保存。', 'ok');
             } catch(e) {
                 setShortcutStatus(e.message || '保存失败，请检查快捷键是否冲突。', 'err');
@@ -340,6 +349,7 @@
             }
             try {
                 renderShortcuts(await api.resetShortcuts());
+                persistShortcutsLocal(shortcutState);
                 setShortcutStatus('已恢复默认快捷键。', 'ok');
             } catch(e) {
                 setShortcutStatus(e.message || '恢复失败。', 'err');

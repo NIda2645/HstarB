@@ -131,8 +131,10 @@ let lastImagePasteAt = 0;
 let lastNodePasteAt = 0;
 let suppressNodeClickUntil = 0;
 let textSelectionGuard = null;
-const UNDO_LIMIT = 40;
+const UNDO_LIMIT = 10;
 const undoStack = [];
+const redoStack = [];
+const SOFTWARE_SHORTCUT_STORAGE_KEY = 'hstar.software.shortcuts';
 let undoSuppressed = false;
 let pendingUndoSnapshot = null;
 const locallyDeletedNodeIds = new Set();
@@ -164,46 +166,107 @@ function smartCascadeEdgeState(edgeKey){
 function smartCascadePathForCtx(ctx=null){
     return ctx?.runState?.runPath || ctx?.runPath || smartCascadeRunPath;
 }
+function resetCanvasHistory(){
+    undoStack.length = 0;
+    redoStack.length = 0;
+    pendingUndoSnapshot = null;
+}
 function capturePendingUndo(){ pendingUndoSnapshot = snapshotForUndo(); }
+function pushHistorySnapshot(stack, state){
+    if(!state?.canvasId || state.canvasId !== canvasId) return;
+    stack.push(state);
+    if(stack.length > UNDO_LIMIT) stack.shift();
+}
 function commitPendingUndo(){
     if(pendingUndoSnapshot){
-        undoStack.push(pendingUndoSnapshot);
-        if(undoStack.length > UNDO_LIMIT) undoStack.shift();
+        pushHistorySnapshot(undoStack, pendingUndoSnapshot);
+        redoStack.length = 0;
         pendingUndoSnapshot = null;
     }
 }
 function discardPendingUndo(){ pendingUndoSnapshot = null; }
 function snapshotForUndo(){
     return {
+        canvasId:canvasId || '',
         nodes: JSON.parse(JSON.stringify(nodes)),
         connections: JSON.parse(JSON.stringify(canvas?.connections || [])),
+        viewport: JSON.parse(JSON.stringify(viewport || {x:0, y:0, scale:1})),
         selectedId,
         selectedIds: selectedIds.slice(),
         selectedImage: {...selectedImage}
     };
 }
+function applyUndoSnapshot(snap){
+    if(!canvas || !snap || snap.canvasId !== canvasId) return false;
+    undoSuppressed = true;
+    (snap.nodes || []).forEach(node => { if(node?.id) locallyDeletedNodeIds.delete(node.id); });
+    nodes = JSON.parse(JSON.stringify(snap.nodes || []));
+    canvas.connections = JSON.parse(JSON.stringify(snap.connections || []));
+    viewport = {...(snap.viewport || viewport || {x:0, y:0, scale:1})};
+    canvas.viewport = {...viewport};
+    selectedId = snap.selectedId || '';
+    selectedIds = (snap.selectedIds || []).filter(id => nodes.some(node => node.id === id));
+    selectedImage = {...(snap.selectedImage || {nodeId:'', index:-1})};
+    activeComposerSubject = null;
+    lastComposerNodeId = '';
+    applyViewport();
+    render();
+    scheduleSave();
+    undoSuppressed = false;
+    return true;
+}
 function pushUndo(){
     if(undoSuppressed) return;
     if(!canvas) return;
-    undoStack.push(snapshotForUndo());
-    if(undoStack.length > UNDO_LIMIT) undoStack.shift();
+    pushHistorySnapshot(undoStack, snapshotForUndo());
+    redoStack.length = 0;
 }
 function performUndo(){
     if(!undoStack.length){ toast(tr('smart.toastNoUndo')); return; }
     const snap = undoStack.pop();
-    undoSuppressed = true;
-    (snap.nodes || []).forEach(node => { if(node?.id) locallyDeletedNodeIds.delete(node.id); });
-    nodes = snap.nodes;
-    if(canvas) canvas.connections = snap.connections;
-    selectedId = snap.selectedId;
-    selectedIds = snap.selectedIds;
-    selectedImage = snap.selectedImage;
-    activeComposerSubject = null;
-    lastComposerNodeId = '';
-    render();
-    scheduleSave();
-    undoSuppressed = false;
-    toast(tr('smart.toastUndone'));
+    if(!snap || snap.canvasId !== canvasId){ resetCanvasHistory(); return; }
+    pushHistorySnapshot(redoStack, snapshotForUndo());
+    if(applyUndoSnapshot(snap)) toast(tr('smart.toastUndone'));
+}
+function performRedo(){
+    if(!redoStack.length){ toast(tr('smart.toastNoRedo') || 'Nothing to redo'); return; }
+    const snap = redoStack.pop();
+    if(!snap || snap.canvasId !== canvasId){ resetCanvasHistory(); return; }
+    pushHistorySnapshot(undoStack, snapshotForUndo());
+    if(applyUndoSnapshot(snap)) toast(tr('smart.toastRedone') || 'Redone');
+}
+function normalizeShortcutForMatch(value){
+    const parts = String(value || '').split('+').map(part => part.trim()).filter(Boolean);
+    const mods = {ctrl:false, alt:false, shift:false, meta:false};
+    let key = '';
+    parts.forEach(part => {
+        const lower = part.toLowerCase();
+        if(lower === 'ctrl' || lower === 'control') mods.ctrl = true;
+        else if(lower === 'alt') mods.alt = true;
+        else if(lower === 'shift') mods.shift = true;
+        else if(lower === 'meta' || lower === 'cmd' || lower === 'win') mods.meta = true;
+        else key = lower;
+    });
+    return {mods, key};
+}
+function shortcutSettings(){
+    const defaults = {undo:{accelerator:'Ctrl+Z'}, redo:{accelerator:'Ctrl+Shift+Z'}};
+    try {
+        const stored = JSON.parse(localStorage.getItem(SOFTWARE_SHORTCUT_STORAGE_KEY) || '{}');
+        return {...defaults, ...(stored && typeof stored === 'object' ? stored : {})};
+    } catch(e) {
+        return defaults;
+    }
+}
+function matchShortcutEvent(event, action){
+    const accelerator = shortcutSettings()[action]?.accelerator || '';
+    const parsed = normalizeShortcutForMatch(accelerator);
+    if(!parsed.key) return false;
+    const eventKey = String(event.key || '').toLowerCase();
+    return parsed.key === eventKey
+        && parsed.mods.ctrl === Boolean(event.ctrlKey || event.metaKey)
+        && parsed.mods.alt === Boolean(event.altKey)
+        && parsed.mods.shift === Boolean(event.shiftKey);
 }
 let comfyWorkflowCache = {};
 let cropState = null;
@@ -4021,6 +4084,7 @@ async function loadCanvas(){
             }
         });
         canvas.connections = Array.isArray(canvas.connections) ? canvas.connections : [];
+        resetCanvasHistory();
         viewport = {...viewport, ...(canvas.viewport || {})};
         viewport.scale = safeScale(viewport.scale);
         if(canvas.settings) settings = {...settings, ...canvas.settings};
@@ -14729,6 +14793,18 @@ window.addEventListener('keydown', e => {
             toggleAssetLibrary();
             return;
         }
+    }
+    if(!isEditableTarget(e.target) && matchShortcutEvent(e, 'undo')){
+        if(e.repeat) return;
+        e.preventDefault();
+        performUndo();
+        return;
+    }
+    if(!isEditableTarget(e.target) && matchShortcutEvent(e, 'redo')){
+        if(e.repeat) return;
+        e.preventDefault();
+        performRedo();
+        return;
     }
     if((e.ctrlKey || e.metaKey) && key === 'c' && !isEditableTarget(e.target)){
         const selectionText = window.getSelection?.().toString() || '';
