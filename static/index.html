@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 
 <head>
@@ -23,13 +23,11 @@
             } catch(e) {}
         })();
     </script>
-    <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.06.22.1782095921"></script>
-    <script src="/static/js/theme.js?v=2026.06.22.1782095915"></script>
-    <script src="/static/js/i18n.js?v=2026.06.24.1782355459"></script>
+    <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.06.25.1782632287"></script>
+    <script src="/static/js/theme.js?v=2026.06.25.1782632287"></script>
+    <script src="/static/js/i18n.js?v=2026.06.25.1781713155"></script>
     <style>
-        @import url('/static/vendor/css/fonts.css?v=2026.06.22.1782095921');
-
-        /* 本地 Tailwind 工具类兜底：CDN 慢/未就绪时也能立刻给图标尺寸，避免首屏左侧栏空白 */
+        @import url('/static/vendor/css/fonts.css?v=2026.06.25.1782632287');
         .w-1\.5 { width: 0.375rem; }
         .h-1\.5 { height: 0.375rem; }
         .w-4 { width: 1rem; }
@@ -83,8 +81,6 @@
             --author-name: #e5e9f0;
             --social-icon: #64748b;
         }
-
-        /* 极简滚动条 */
         html,
         body {
             overscroll-behavior: auto;
@@ -142,8 +138,6 @@
             position: relative;
             transition: background 0.3s;
         }
-
-        /* 侧边栏 */
         .sidebar {
             width: 80px;
             min-width: 80px;
@@ -164,8 +158,6 @@
             width: 220px;
             transition-delay: 0s;
         }
-
-        /* 首次加载时与 iframe 的 0.5s 淡入同步播放，避免侧栏"焊死"在原地造成视觉断层 */
         @keyframes sidebar-enter {
             from { opacity: 0; transform: translateX(-6px); }
             to { opacity: 1; transform: translateX(0); }
@@ -175,10 +167,10 @@
         }
 
         .logo-ring {
-            width: 36px;
-            height: 36px;
-            border: 2px solid var(--text);
-            border-radius: 12px;
+            width: 44px;
+            height: 44px;
+            border: 0;
+            border-radius: 0;
             background: transparent;
             padding: 0;
             color: var(--text);
@@ -186,28 +178,28 @@
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            flex: 0 0 auto;
-            /* 仅保留 hover 真正会用到的属性过渡，避免 transition: all 因首屏属性补齐被意外触发 */
-            transition: transform 0.6s var(--fluid-ease) 0.5s, border-radius 0.6s var(--fluid-ease) 0.5s, border-color 0.3s, background-color .18s, box-shadow .2s;
+            flex-shrink: 0;
+            overflow: visible;
+            transition: transform 0.28s var(--fluid-ease), box-shadow .2s;
         }
 
         .sidebar:hover .logo-ring {
-            transform: rotate(90deg);
-            border-radius: 50%;
+            transform: scale(1.04);
             transition-delay: 0s;
+        }
+
+        .sidebar-logo-svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+            flex: 0 0 auto;
         }
 
         .logo-ring:hover,
         .logo-ring:focus-visible {
-            background: var(--nav-hover-bg);
-            border-color: var(--text);
-            box-shadow: 0 0 0 4px rgba(148, 163, 184, .16), 0 10px 24px rgba(15, 23, 42, .08);
+            background: transparent;
+            box-shadow: none;
             outline: none;
-        }
-
-        .logo-ring:hover #logo-dot,
-        .logo-ring:focus-visible #logo-dot {
-            transform: scale(1.8);
         }
 
         .logo-ring:active {
@@ -216,14 +208,8 @@
         }
 
         .sidebar:hover .logo-ring:active {
-            transform: rotate(90deg) scale(.94);
+            transform: scale(.96);
         }
-
-        #logo-dot {
-            transition: transform .16s ease, background-color .16s ease, box-shadow .16s ease;
-        }
-
-        /* 导航项 */
         .nav-item {
             position: relative;
             width: 48px;
@@ -235,7 +221,6 @@
             justify-content: flex-start;
             border-radius: 18px;
             cursor: pointer;
-            /* 只对 width 做带延迟的过渡（侧栏悬停展开效果）；background/color 不参与过渡，避免 active 切换时底色"流动" */
             transition: width 0.3s var(--fluid-ease) 0.5s;
             color: var(--muted);
             overflow: hidden;
@@ -490,8 +475,6 @@
             opacity: 0.5;
             font-size: 9px;
         }
-
-        /* 作者组件 */
         .author-box {
             width: 100%;
             height: 60px;
@@ -508,7 +491,6 @@
             font-size: 14px;
             font-weight: 800;
             color: var(--text);
-            /* 只过渡 hover 时真正改的 transform/opacity，避免 all 触发延迟 */
             transition: transform 0.5s var(--fluid-ease) 0.4s, opacity 0.5s var(--fluid-ease) 0.4s;
             z-index: 10;
         }
@@ -586,7 +568,6 @@
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            /* 只过渡 hover/激活会改的属性，避免 all 触发延迟 */
             transition: width 0.3s var(--fluid-ease) 0.5s, gap 0.3s var(--fluid-ease) 0.5s, background-color 0.2s, color 0.2s, border-color 0.2s;
             flex-shrink: 0;
             overflow:hidden;
@@ -702,7 +683,6 @@
             max-width:120px;
             transition-delay:.15s;
         }
-        /* 折叠态去除 gap，避免图标被推偏 */
         .side-pill { gap:0; }
         .sidebar:hover .side-pill { gap:8px; }
 
@@ -1003,8 +983,6 @@
         .update-modal-summary.ok .update-modal-dot { background:#22c55e; }
         .update-modal-summary.warn .update-modal-dot { background:#f59e0b; }
         .update-modal-summary.fail .update-modal-dot { background:#ef4444; }
-
-        /* 更新弹窗：双卡片需要更宽的面板，避免左右布局被裁剪 */
         #project-update-modal .studio-modal-panel { width:min(880px, 100%); max-height:min(840px, calc(100vh - 48px)); }
         .update-notes-box { margin:2px 0 14px; padding:12px; border:1px solid #e5e7eb; border-radius:8px; background:#fbfdff; }
         .update-notes-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; }
@@ -1316,11 +1294,6 @@
             color: var(--text);
             box-shadow: 0 0 0 4px rgba(148, 163, 184, .10);
         }
-        .sidebar.is-pinned #logo-dot {
-            background: var(--text) !important;
-            transform: scale(1.35);
-            box-shadow: 0 0 0 4px rgba(148, 163, 184, .16);
-        }
         .sidebar.is-pinned .logo-ring:hover,
         .sidebar.is-pinned .logo-ring:focus-visible {
             box-shadow: 0 0 0 5px rgba(148, 163, 184, .14);
@@ -1446,108 +1419,101 @@
 
     <div class="app-shell">
         <aside class="sidebar" id="studioSidebar">
-            <button class="logo-ring mb-12" id="sidebarLogoToggle" type="button" onclick="toggleSidebarPinned(event)" aria-pressed="false" title="固定导航栏">
-                <div class="w-1.5 h-1.5 rounded-full transition-colors" id="logo-dot" style="background:var(--text)"></div>
+            <button class="logo-ring mb-12" id="sidebarLogoToggle" type="button" onclick="toggleSidebarPinned(event)" aria-pressed="false" title="&#22266;&#23450;&#23548;&#33322;&#26639;">
+                <svg class="sidebar-logo-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-hidden="true" focusable="false">
+                    <defs>
+                        <filter id="sidebar-logo-icon-shadow" x="-10%" y="-10%" width="120%" height="120%">
+                            <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#a4b4cb" flood-opacity="0.4" />
+                        </filter>
+                        <filter id="sidebar-logo-globe-glow" x="-20%" y="-20%" width="140%" height="140%">
+                            <feGaussianBlur stdDeviation="20" result="blur" />
+                            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                        </filter>
+                        <linearGradient id="sidebar-logo-globe-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="#2b7bf5" stop-opacity="0.9" />
+                            <stop offset="40%" stop-color="#4aa1f7" stop-opacity="0.7" />
+                            <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+                        </linearGradient>
+                        <linearGradient id="sidebar-logo-orbit-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.1" />
+                            <stop offset="50%" stop-color="#3b82f6" stop-opacity="0.8" />
+                            <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.1" />
+                        </linearGradient>
+                        <pattern id="sidebar-logo-dot-map" x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse">
+                            <circle cx="4" cy="4" r="1.5" fill="#ffffff" fill-opacity="0.7" />
+                        </pattern>
+                        <clipPath id="sidebar-logo-globe-clip">
+                            <path d="M 126 288 C 126 180, 180 130, 256 130 C 332 130, 386 180, 386 288 Z" />
+                        </clipPath>
+                    </defs>
+                    <rect x="48" y="48" width="416" height="416" rx="96" fill="#fcfdfe" filter="url(#sidebar-logo-icon-shadow)" />
+                    <circle cx="340" cy="180" r="16" fill="none" stroke="#b3cce6" stroke-width="0.5" />
+                    <circle cx="340" cy="180" r="24" fill="none" stroke="#b3cce6" stroke-width="0.5" />
+                    <circle cx="160" cy="380" r="12" fill="none" stroke="#b3cce6" stroke-width="0.5" />
+                    <circle cx="160" cy="380" r="20" fill="none" stroke="#b3cce6" stroke-width="0.5" />
+                    <circle cx="160" cy="380" r="28" fill="none" stroke="#b3cce6" stroke-width="0.5" />
+                    <g filter="url(#sidebar-logo-globe-glow)">
+                        <path d="M 126 288 C 126 180, 180 130, 256 130 C 332 130, 386 180, 386 288 Z" fill="url(#sidebar-logo-globe-gradient)" />
+                        <g clip-path="url(#sidebar-logo-globe-clip)">
+                            <rect x="126" y="130" width="260" height="158" fill="url(#sidebar-logo-dot-map)" opacity="0.3" />
+                            <path d="M 160 210 Q 180 190 200 210 T 240 230 T 280 200 T 320 220 L 340 260 L 300 280 L 250 260 L 180 270 Z" fill="url(#sidebar-logo-dot-map)" opacity="0.8" />
+                            <path d="M 330 180 Q 350 170 360 190 T 350 230 Z" fill="url(#sidebar-logo-dot-map)" opacity="0.8" />
+                            <path d="M 140 230 Q 150 220 160 240 T 150 260 Z" fill="url(#sidebar-logo-dot-map)" opacity="0.8" />
+                        </g>
+                    </g>
+                    <g fill="none" stroke-width="1.5">
+                        <ellipse cx="256" cy="270" rx="160" ry="40" transform="rotate(-12 256 270)" stroke="url(#sidebar-logo-orbit-gradient)" />
+                        <ellipse cx="256" cy="270" rx="170" ry="30" transform="rotate(15 256 270)" stroke="url(#sidebar-logo-orbit-gradient)" />
+                    </g>
+                    <g fill="#4a90e2">
+                        <circle cx="106" cy="235" r="4" />
+                        <circle cx="410" cy="305" r="5" />
+                        <circle cx="95" cy="295" r="4.5" />
+                        <circle cx="418" cy="235" r="4" />
+                        <circle cx="245" cy="296" r="6" fill="#3b82f6" />
+                        <circle cx="160" cy="380" r="5" fill="#589cf6" />
+                    </g>
+                    <circle cx="210" cy="110" r="2" fill="#589cf6" opacity="0.6" />
+                    <circle cx="380" cy="100" r="1.5" fill="#589cf6" opacity="0.8" />
+                    <circle cx="120" cy="400" r="2" fill="#589cf6" opacity="0.5" />
+                    <circle cx="280" cy="420" r="1.5" fill="#589cf6" opacity="0.7" />
+                    <circle cx="430" cy="360" r="2" fill="#589cf6" opacity="0.6" />
+                </svg>
             </button>
 
             <nav>
-                <button class="nav-fold-toggle" id="local-nav-toggle" type="button" onclick="toggleLocalNav()" aria-expanded="true" title="折叠本地功能">
-                    <svg class="nav-fold-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <polyline points="6 9 12 15 18 9"></polyline>
-                    </svg>
-                    <span class="nav-text" data-i18n="nav.localTools">本地功能</span>
+                <button class="nav-fold-toggle" id="local-nav-toggle" type="button" onclick="toggleLocalNav()" aria-expanded="true" title="&#25240;&#21472;&#26412;&#22320;&#21151;&#33021;">
+                    <svg class="nav-fold-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    <span class="nav-text" data-i18n="nav.localTools">&#26412;&#22320;&#21151;&#33021;</span>
                 </button>
-
                 <div class="nav-fold-group" id="local-nav-group">
-                    <div class="nav-item active" onclick="switchUI(this, 'zimage')">
-                        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.587-1.587a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                        </svg>
-                        <span class="nav-text" data-i18n="nav.textToImage">文生图</span>
-                    </div>
-                    <div class="nav-item" onclick="switchUI(this, 'enhance')">
-                        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                        </svg>
-                        <span class="nav-text" data-i18n="nav.enhance">细节增强</span>
-                    </div>
-                    <div class="nav-item" onclick="switchUI(this, 'klein')">
-                        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                        </svg>
-                        <span class="nav-text" data-i18n="nav.imageEdit">图片编辑</span>
-                    </div>
-                    <div class="nav-item" onclick="switchUI(this, 'angle')">
-                        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-                            <line x1="12" y1="22.08" x2="12" y2="12"></line>
-                        </svg>
-                        <span class="nav-text" data-i18n="nav.angle">角度控制</span>
-                    </div>
+                    <div class="nav-item active" onclick="switchUI(this, 'zimage')"><svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.587-1.587a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg><span class="nav-text" data-i18n="nav.textToImage">&#25991;&#29983;&#22270;</span></div>
+                    <div class="nav-item" onclick="switchUI(this, 'enhance')"><svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg><span class="nav-text" data-i18n="nav.enhance">&#32454;&#33410;&#22686;&#24378;</span></div>
+                    <div class="nav-item" onclick="switchUI(this, 'klein')"><svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg><span class="nav-text" data-i18n="nav.imageEdit">&#22270;&#29255;&#32534;&#36753;</span></div>
+                    <div class="nav-item" onclick="switchUI(this, 'angle')"><svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg><span class="nav-text" data-i18n="nav.angle">&#35282;&#24230;&#25511;&#21046;</span></div>
                 </div>
-
-                <!-- 分隔线 -->
                 <div style="width:32px;height:1px;background:var(--border);margin:8px auto;transition:background 0.3s;"></div>
-
-                <div class="nav-item" onclick="switchUI(this, 'online')">
-                    <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"></path>
-                        <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-                    </svg>
-                    <span class="nav-text" data-i18n="nav.online">在线生图</span>
-                </div>
-                <div class="nav-item" onclick="switchUI(this, 'gpt-chat')">
-                    <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                    </svg>
-                    <span class="nav-text" data-i18n="nav.gpt">GPT 对话</span>
-                </div>
-                <div class="nav-item" onclick="switchUI(this, 'canvas')">
-                    <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="3" width="7" height="7"></rect>
-                        <rect x="14" y="3" width="7" height="7"></rect>
-                        <rect x="14" y="14" width="7" height="7"></rect>
-                        <rect x="3" y="14" width="7" height="7"></rect>
-                    </svg>
-                    <span class="nav-text" data-i18n="nav.canvas">无限画布</span>
-                </div>
-                <div class="nav-item" onclick="switchUI(this, 'asset-manager')">
-                    <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M4 19.5V6.8A2.8 2.8 0 0 1 6.8 4h10.4A2.8 2.8 0 0 1 20 6.8v12.7"></path>
-                        <path d="M7 8h10"></path>
-                        <path d="M7 12h10"></path>
-                        <path d="M7 16h6"></path>
-                    </svg>
-                    <span class="nav-text" data-i18n="nav.assetManager">素材库</span>
-                </div>
+                <div class="nav-item" onclick="switchUI(this, 'online')"><svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"></path><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg><span class="nav-text" data-i18n="nav.online">&#22312;&#32447;&#29983;&#22270;</span></div>
+                <div class="nav-item" onclick="switchUI(this, 'gpt-chat')"><svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg><span class="nav-text" data-i18n="nav.gpt">GPT &#23545;&#35805;</span></div>
+                <div class="nav-item" onclick="switchUI(this, 'canvas')"><svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg><span class="nav-text" data-i18n="nav.canvas">&#26080;&#38480;&#30011;&#24067;</span></div>
+                <div class="nav-item" onclick="switchUI(this, 'asset-manager')"><svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V6.8A2.8 2.8 0 0 1 6.8 4h10.4A2.8 2.8 0 0 1 20 6.8v12.7"></path><path d="M7 8h10"></path><path d="M7 12h10"></path><path d="M7 16h6"></path></svg><span class="nav-text" data-i18n="nav.assetManager">&#32032;&#26448;&#24211;</span></div>
             </nav>
-
             <div class="side-actions">
-                <button class="side-pill" onclick="switchUI(this, 'api-settings')" type="button" title="API 设置">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M15 7h3a5 5 0 0 1 0 10h-3"></path>
-                        <path d="M9 17H6A5 5 0 0 1 6 7h3"></path>
-                        <line x1="8" y1="12" x2="16" y2="12"></line>
-                    </svg>
-                    <span class="side-pill-text" data-i18n="common.apiSettings">API 设置</span>
-                </button>
-                <button class="side-pill settings-fold-toggle" id="settings-fold-toggle" onclick="toggleSidebarSettings()" type="button" title="更多设置" aria-expanded="false">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <button class="side-pill" onclick="switchUI(this, 'api-settings')" type="button" title="API &#35774;&#32622;"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h3a5 5 0 0 1 0 10h-3"></path><path d="M9 17H6A5 5 0 0 1 6 7h3"></path><line x1="8" y1="12" x2="16" y2="12"></line></svg><span class="side-pill-text" data-i18n="common.apiSettings">API &#35774;&#32622;</span></button>
+                <button class="side-pill" onclick="switchUI(this, 'software-settings')" type="button" title="&#36719;&#20214;&#35774;&#32622;">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <circle cx="12" cy="12" r="3"></circle>
                         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.36 1.08V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1.08-.36H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-.6 1.65 1.65 0 0 0 .36-1.08V3a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.22.38.58.69 1 .86.2.08.42.13.65.14H21a2 2 0 1 1 0 4h-.09A1.65 1.65 0 0 0 19.4 15z"></path>
                     </svg>
-                    <span class="side-pill-text" data-i18n="common.moreSettings">更多设置</span>
-                    <svg class="settings-fold-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <polyline points="6 9 12 15 18 9"></polyline>
-                    </svg>
+                    <span class="side-pill-text">&#36719;&#20214;&#35774;&#32622;</span>
                 </button>
+                <button class="side-pill settings-fold-toggle" id="settings-fold-toggle" onclick="toggleSidebarSettings()" type="button" title="&#26356;&#22810;&#35774;&#32622;" aria-expanded="false"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.36 1.08V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1.08-.36H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-.6 1.65 1.65 0 0 0 .36-1.08V3a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.22.38.58.69 1 .86.2.08.42.13.65.14H21a2 2 0 1 1 0 4h-.09A1.65 1.65 0 0 0 19.4 15z"></path></svg><span class="side-pill-text">&#26356;&#22810;&#35774;&#32622;</span><svg class="settings-fold-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>
                 <div class="settings-fold-group is-collapsed" id="settings-fold-group">
-                    <button class="side-pill" onclick="toggleTheme()" id="theme-toggle-btn" type="button" title="切换夜间模式">
-                        <svg id="icon-moon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <button class="side-pill" onclick="toggleTheme()" id="theme-toggle-btn" type="button" title="&#20999;&#25442;&#22812;&#38388;&#27169;&#24335;">
+                        <svg id="icon-moon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
                         </svg>
-                        <svg id="icon-sun" style="display:none" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg id="icon-sun" style="display:none" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <circle cx="12" cy="12" r="5"></circle>
                             <line x1="12" y1="1" x2="12" y2="3"></line>
                             <line x1="12" y1="21" x2="12" y2="23"></line>
@@ -1558,103 +1524,40 @@
                             <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
                             <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
                         </svg>
-                        <span class="side-pill-text" data-i18n="common.darkMode">黑夜模式</span>
+                        <span class="side-pill-text" data-i18n="common.darkMode">&#40657;&#22812;&#27169;&#24335;</span>
                     </button>
-                    <button class="side-pill" onclick="toggleLanguage()" id="lang-toggle-btn" type="button" title="Language">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <path d="M2 12h20"></path>
-                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-                        </svg>
-                        <span class="side-pill-text" data-i18n="common.language">中文</span>
-                    </button>
-                    <button class="side-pill" onclick="switchUI(this, 'comfyui-settings')" type="button" title="工作流设置">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="3" y="3" width="7" height="7" rx="1"></rect>
-                            <rect x="14" y="3" width="7" height="7" rx="1"></rect>
-                            <rect x="3" y="14" width="7" height="7" rx="1"></rect>
-                            <path d="M14 14h7v7h-7z"></path>
-                            <line x1="10" y1="6.5" x2="14" y2="6.5"></line>
-                            <line x1="6.5" y1="10" x2="6.5" y2="14"></line>
-                        </svg>
-                        <span class="side-pill-text" data-i18n="common.comfyuiSettings">工作流设置</span>
-                    </button>
-                </div>
-                <button id="github-entry-btn" class="side-pill" onclick="openProjectPage()" type="button" title="GitHub">
-                    <svg fill="currentColor" stroke="none" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M12 .5a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.05c-3.34.73-4.04-1.42-4.04-1.42-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.74.08-.74 1.21.09 1.85 1.25 1.85 1.25 1.07 1.83 2.81 1.3 3.5.99.11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.53.12-3.18 0 0 1.01-.32 3.3 1.23a11.45 11.45 0 0 1 6.01 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.63-5.49 5.93.43.37.81 1.1.81 2.22v3.29c0 .32.22.69.83.57A12 12 0 0 0 12 .5Z"></path>
-                    </svg>
-                    <span class="side-pill-text" data-i18n="common.project">项目主页</span>
-                </button>
-                <button id="update-now-btn" class="update-now-btn" onclick="runProjectUpdate()" type="button" title="一键更新">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
-                        <path d="M21 3v6h-6"></path>
-                    </svg>
-                    <span id="update-now-text" class="update-now-text" data-i18n="update.oneClick">一键更新</span>
-                </button>
-                <div id="project-version-badge" class="project-version-badge" title="点击检测更新" role="button" tabindex="0" onclick="checkForUpdates(true)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();checkForUpdates(true);}">v-</div>
-            </div>
-
-            <div class="author-box">
-                <span class="dx-letter letter-d">D</span>
-                <span class="dx-letter letter-x">X</span>
-
-                <div class="author-content-wrap">
-                    <div class="author-name-lite">wuli大雄</div>
-                    <div class="social-row-lite">
-                        <a href="https://space.bilibili.com/78652351" target="_blank" class="social-icon-lite">
-                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M17.813 4.653h-.854L15.66 3.053a1.147 1.147 0 00-1.63 0l-1.3 1.6h-1.46L9.97 3.053a1.147 1.147 0 00-1.63 0L7.043 4.653h-.854a3.946 3.946 0 00-3.93 3.934v8.117a3.946 3.946 0 003.93 3.934h11.624a3.946 3.946 0 003.93-3.934V8.587a3.946 3.946 0 00-3.93-3.934zM7.152 13.9a1.465 1.465 0 111.47-1.462 1.465 1.465 0 01-1.47 1.462zm7.696 0a1.465 1.465 0 111.47-1.462 1.465 1.465 0 01-1.47 1.462z" />
-                            </svg>
-                        </a>
-                        <a href="https://www.xiaohongshu.com/user/profile/6433c34c000000001a023538" target="_blank" class="social-icon-lite">
-                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z" />
-                            </svg>
-                        </a>
-                        <a href="https://www.youtube.com/@%E5%A4%A7%E9%9B%84dx" target="_blank" class="social-icon-lite">
-                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
-                            </svg>
-                        </a>
-                        <a href="https://x.com/dx8152?s=21" target="_blank" class="social-icon-lite">
-                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                            </svg>
-                        </a>
-                    </div>
+                    <button class="side-pill" onclick="toggleLanguage()" id="lang-toggle-btn" type="button" title="Language"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M2 12h20"></path><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg><span class="side-pill-text" data-i18n="common.language">&#20013;&#25991;</span></button>
+                    <button class="side-pill" onclick="switchUI(this, 'comfyui-settings')" type="button" title="&#24037;&#20316;&#27969;&#35774;&#32622;"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"></path><path d="M4 12h16"></path><path d="M4 17h16"></path><circle cx="8" cy="7" r="2"></circle><circle cx="16" cy="12" r="2"></circle><circle cx="11" cy="17" r="2"></circle></svg><span class="side-pill-text" data-i18n="common.comfyuiSettings">&#24037;&#20316;&#27969;&#35774;&#32622;</span></button>
                 </div>
             </div>
         </aside>
-        <script>
-            /* 在侧栏 DOM 解析完后立即把 active 类移到当前页对应的入口，避免首屏先在文生图上闪一下 */
-            (function(){
-                try {
-                    var pageId = localStorage.getItem('studio_active_page');
-                    if(pageId && pageId !== 'zimage') {
-                        document.querySelectorAll('.nav-item.active, .side-pill.active').forEach(function(n){
-                            n.classList.remove('active');
-                        });
-                        var target = document.querySelector('[onclick*="\'' + pageId + '\'"]');
-                        if(target) target.classList.add('active');
-                    }
-                } catch(e) {}
-            })();
-        </script>
 
         <main class="stage">
-            <iframe id="frame-zimage" data-src="/static/zimage.html?v=2026.06.22.1782095909" class="active" scrolling="yes"></iframe>
-            <iframe id="frame-enhance" data-src="/static/enhance.html?v=2026.06.22.1782180183" scrolling="yes"></iframe>
-            <iframe id="frame-klein" data-src="/static/klein.html?v=2026.06.22.1782095910" scrolling="yes"></iframe>
-            <iframe id="frame-angle" data-src="/static/angle.html?v=2026.06.22.1782180183" scrolling="yes"></iframe>
-            <iframe id="frame-online" data-src="/static/online.html?v=2026.06.22.1782095910" scrolling="yes"></iframe>
-            <iframe id="frame-gpt-chat" data-src="/static/gpt-chat.html?v=2026.06.22.1782180183" scrolling="yes"></iframe>
-            <iframe id="frame-canvas" data-src="/static/canvas-list.html?v=2026.06.22.1782180183" scrolling="yes"></iframe>
-            <iframe id="frame-asset-manager" data-src="/static/asset-manager.html?v=2026.06.22.1782180183" scrolling="yes"></iframe>
-            <iframe id="frame-api-settings" data-src="/static/api-settings.html?v=2026.06.22.1782180183" scrolling="yes"></iframe>
-            <iframe id="frame-comfyui-settings" data-src="/static/comfyui-settings.html?v=2026.06.22.1782180183" scrolling="yes"></iframe>
+            <iframe id="frame-zimage" data-src="/static/zimage.html?v=2026.06.25.1782651104" class="active" scrolling="yes"></iframe>
+            <iframe id="frame-enhance" data-src="/static/enhance.html?v=2026.06.25.1782651104" scrolling="yes"></iframe>
+            <iframe id="frame-klein" data-src="/static/klein.html?v=2026.06.25.1782651104" scrolling="yes"></iframe>
+            <iframe id="frame-angle" data-src="/static/angle.html?v=2026.06.25.1782651104" scrolling="yes"></iframe>
+            <iframe id="frame-online" data-src="/static/online.html?v=2026.06.25.1782651104" scrolling="yes"></iframe>
+            <iframe id="frame-gpt-chat" data-src="/static/gpt-chat.html?v=2026.06.25.1782651104" scrolling="yes"></iframe>
+            <iframe id="frame-canvas" data-src="/static/canvas-list.html?v=2026.06.25.1782651104" scrolling="yes"></iframe>
+            <iframe id="frame-asset-manager" data-src="/static/asset-manager.html?v=2026.06.25.1782651104" scrolling="yes"></iframe>
+            <iframe id="frame-software-settings" data-src="/static/software-settings.html?v=2026.06.25.1782058665" scrolling="yes"></iframe>
+            <iframe id="frame-api-settings" data-src="/static/api-settings.html?v=2026.06.25.1782708000" scrolling="yes"></iframe>
+            <iframe id="frame-comfyui-settings" data-src="/static/comfyui-settings.html?v=2026.06.25.1782651104" scrolling="yes"></iframe>
 
+            <div class="nano-monitor" id="nano-monitor">
+                <div class="stat-group">
+                    <div class="pulse-dot animate-pulse"></div>
+                    <div class="spinner-nano"></div>
+                    <span class="label-nano">ONLINE</span>
+                    <span id="online-val">1</span>
+                </div>
+                <div class="divider"></div>
+                <div class="stat-group">
+                    <span class="label-nano">QUEUE</span>
+                    <span id="queue-val">0</span>
+                </div>
+            </div>
         </main>
     </div>
 
@@ -1676,7 +1579,7 @@
                 <p id="project-update-copy" class="studio-modal-copy"></p>
                 <div id="project-update-notes" class="update-notes-box" hidden>
                     <div class="update-notes-head">
-                        <strong id="project-update-notes-title">本次更新内容</strong>
+                        <strong id="project-update-notes-title">&#26412;&#27425;&#26356;&#26032;&#20869;&#23481;</strong>
                         <span id="project-update-notes-version" class="update-notes-version"></span>
                     </div>
                     <ol id="project-update-notes-list" class="update-notes-list"></ol>
@@ -1687,7 +1590,7 @@
                         <div class="update-source-head">
                             <div class="update-source-title">
                                 <strong>GitHub 下载源</strong>
-                                <span>GitHub API / raw 文件 / GitHub 网页，Google 仅作外网参考。</span>
+                                <span>GitHub API / raw 文件 / GitHub 页面，Google 仅作外网参考。</span>
                             </div>
                             <div class="update-source-head-right">
                                 <span class="update-source-check" aria-hidden="true">
@@ -1738,7 +1641,7 @@
                         <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
                         <path d="M21 3v6h-6"></path>
                     </svg>
-                    <span id="project-update-confirm-text">开始更新</span>
+                    <span id="project-update-confirm-text">&#24320;&#22987;&#26356;&#26032;</span>
                 </button>
             </div>
         </div>
@@ -1761,7 +1664,7 @@
         const SIDEBAR_SETTINGS_COLLAPSED_KEY = 'studio_sidebar_settings_collapsed';
         const SIDEBAR_PINNED_KEY = 'studio_sidebar_pinned';
         const DEFAULT_PAGE_ID = 'zimage';
-        const PAGE_IDS = ['zimage','enhance','klein','angle','online','gpt-chat','canvas','asset-manager','api-settings','comfyui-settings'];
+        const PAGE_IDS = ['zimage','enhance','klein','angle','online','gpt-chat','canvas','asset-manager','api-settings','software-settings','comfyui-settings'];
         const LOCAL_PAGE_IDS = ['zimage','enhance','klein','angle'];
         const PROJECT_URL = 'https://github.com/hero8152/Infinite-Canvas';
         let appInfo = { version:'', repo_url:PROJECT_URL, version_url:'https://raw.githubusercontent.com/hero8152/Infinite-Canvas/main/VERSION' };
@@ -1898,13 +1801,18 @@
         } catch(e) {}
 
         function restoreActivePage() {
-            restoreSidebarPinned();
-            const id = PAGE_IDS.includes(localStorage.getItem(ACTIVE_PAGE_KEY)) ? localStorage.getItem(ACTIVE_PAGE_KEY) : DEFAULT_PAGE_ID;
-            restoreLocalNav(id);
-            restoreSidebarSettings(id);
-            const trigger = document.querySelector(`[onclick*="'${id}'"],[onclick*='"${id}"']`);
-            switchUI(trigger, id, { skipRemember:true });
-            document.documentElement.classList.remove('studio-route-booting');
+            try {
+                restoreSidebarPinned();
+                const id = PAGE_IDS.includes(localStorage.getItem(ACTIVE_PAGE_KEY)) ? localStorage.getItem(ACTIVE_PAGE_KEY) : DEFAULT_PAGE_ID;
+                restoreLocalNav(id);
+                restoreSidebarSettings(id);
+                const trigger = document.querySelector(`[onclick*="'${id}'"],[onclick*='"${id}"']`);
+                switchUI(trigger, id, { skipRemember:true });
+            } catch (error) {
+                console.error('Failed to restore active page', error);
+            } finally {
+                document.documentElement.classList.remove('studio-route-booting');
+            }
         }
         document.addEventListener('DOMContentLoaded', restoreActivePage, { once:true });
 
@@ -1914,17 +1822,14 @@
                 const data = await res.json();
                 const monitor = document.getElementById('nano-monitor');
                 const queueVal = document.getElementById('queue-val');
-                const logoDot = document.getElementById('logo-dot');
                 const total = data.total || 0;
                 const pos = data.position || 0;
                 if (pos > 0) {
-                    monitor?.classList.add('is-busy');
-                    if (queueVal) queueVal.innerText = `${pos}/${total}`;
-                    if (logoDot) logoDot.style.backgroundColor = '#3b82f6';
+                    monitor.classList.add('is-busy');
+                    queueVal.innerText = `${pos}/${total}`;
                 } else {
-                    monitor?.classList.remove('is-busy');
-                    if (queueVal) queueVal.innerText = total > 0 ? total : '0';
-                    if (logoDot) logoDot.style.backgroundColor = 'var(--text)';
+                    monitor.classList.remove('is-busy');
+                    queueVal.innerText = total > 0 ? total : '0';
                 }
             } catch (e) { }
         }
@@ -1936,8 +1841,7 @@
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 if (data.type === 'stats') {
-                    const ov = document.getElementById('online-val');
-                    if (ov) ov.innerText = data.online_count;
+                    document.getElementById('online-val').innerText = data.online_count;
                 } else if (data.type === 'cloud_status') {
                     const iframe = document.querySelector('iframe.active');
                     if (iframe && iframe.contentWindow) {
@@ -1979,20 +1883,12 @@
         function updateThemeIcon(theme) {
             const moon = document.getElementById('icon-moon');
             const sun = document.getElementById('icon-sun');
-            const dark = theme === 'dark';
-            if (dark) {
+            if (theme === 'dark') {
                 moon.style.display = 'none';
                 sun.style.display = 'block';
             } else {
                 moon.style.display = 'block';
                 sun.style.display = 'none';
-            }
-            // 标签随当前主题切换：暗色时提示切到白天，亮色时提示切到黑夜
-            const label = document.querySelector('#theme-toggle-btn .side-pill-text');
-            if (label) {
-                const key = dark ? 'common.lightMode' : 'common.darkMode';
-                label.dataset.i18n = key;
-                if (window.StudioI18n) label.textContent = window.StudioI18n.t(key);
             }
         }
 
@@ -2740,3 +2636,5 @@
 </body>
 
 </html>
+
+

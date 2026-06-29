@@ -190,6 +190,7 @@
         "canvas.deletedCanvas": { zh: "已删除画布", en: "Deleted canvas" },
         "canvas.changeIcon": { zh: "修改画布图标", en: "Change canvas icon" },
         "canvas.modePreview": { zh: "预览", en: "Preview" },
+        "canvas.modeMarker": { zh: "标记", en: "Marker" },
         "canvas.previewImage": { zh: "预览图片", en: "Preview image" },
         "canvas.previewHint": { zh: "查看大图，可切换到裁剪 / 扩图 / 遮罩等模式", en: "View the full image, or switch to crop / expand / mask modes" },
         "canvas.sortRecent": { zh: "最近编辑", en: "Recent" },

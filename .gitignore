@@ -1,0 +1,48 @@
+# Secrets and local API configuration
+API/.env
+.env
+.env.*
+!.env.example
+
+# Python cache and local tooling
+__pycache__/
+*.py[cod]
+python/Lib/
+python/Scripts/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Node/local test cache
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime user data and generated files
+assets/input/
+assets/library/
+assets/output/
+assets/uploads/
+output/
+logs/
+*.log
+*.tmp
+*.temp
+
+# Build and packaging output
+build/
+dist/
+release/
+releases/
+*.spec
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

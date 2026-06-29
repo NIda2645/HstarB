@@ -1,5 +1,6 @@
 let providers = [];
 let selectedId = '';
+const PROVIDER_PROTOCOL_OPTIONS = ['openai', 'apimart', 'gemini', 'linapi', 'otuapi', 'grsai', 'toapis', 'baofu', 'bananarouter', 'moonly', 'volcengine', 'runninghub', 'jimeng'];
 const providerList = document.getElementById('providerList');
 const editorTitle = document.getElementById('editorTitle');
 const statusEl = document.getElementById('status');
@@ -58,6 +59,7 @@ const recommendApiList = document.getElementById('recommendApiList');
 const VOLCENGINE_DEFAULT_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3';
 const VOLCENGINE_DEFAULT_PROJECT_NAME = 'default';
 const VOLCENGINE_DEFAULT_REGION = 'cn-beijing';
+const VOLCENGINE_LOGO_SVG = `<span class="volcengine-inline-brand" aria-label="火山引擎"><svg aria-hidden="true" focusable="false" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M865.701307 472.461514l-137.847996 539.179456a9.433629 9.433629 0 0 0 0.024376 4.460864 10.043037 10.043037 0 0 0 9.994285 7.702912h275.622863a10.043037 10.043037 0 0 0 10.043037-12.188152l-138.506156-539.15508a10.140542 10.140542 0 0 0-15.69834-5.192153 9.799274 9.799274 0 0 0-3.656445 5.192153M107.013238 594.635547L0.245029 1011.64097a9.994284 9.994284 0 0 0 10.067413 12.115023H223.044442a10.164919 10.164919 0 0 0 8.04418-3.656445 9.726145 9.726145 0 0 0 1.950105-3.997714 9.433629 9.433629 0 0 0 0.048752-4.460864L126.221765 594.635547a9.799274 9.799274 0 0 0-3.656446-5.070271 10.238047 10.238047 0 0 0-5.923441-1.950105 10.238047 10.238047 0 0 0-5.996571 1.950105 9.799274 9.799274 0 0 0-3.632069 5.070271" fill="#00E5E5"></path><path d="M295.320182 249.393961L100.772904 1011.616594a9.750521 9.750521 0 0 0 1.901352 8.287943 9.896779 9.896779 0 0 0 7.678535 3.851456H499.471724a10.043037 10.043037 0 0 0 10.091789-12.139399L314.528709 249.369585a9.799274 9.799274 0 0 0-3.632069-5.045895 10.238047 10.238047 0 0 0-5.947818-1.974481 10.238047 10.238047 0 0 0-5.996571 1.950104 9.799274 9.799274 0 0 0-3.632069 5.070272" fill="#006EFF"></path><path d="M630.933128 7.020375a9.799274 9.799274 0 0 0-3.632069-5.045894 10.238047 10.238047 0 0 0-5.996571-1.974481 10.238047 10.238047 0 0 0-5.947818 1.950104 9.799274 9.799274 0 0 0-3.632069 5.070271L345.77913 1011.616594a9.994284 9.994284 0 0 0 10.09179 12.139399H887.298712a10.164919 10.164919 0 0 0 8.04418-3.656445 10.359929 10.359929 0 0 0 1.998857-4.02209 9.994284 9.994284 0 0 0 0-4.460864L630.933128 7.020375z" fill="#006EFF"></path><path d="M435.605809 360.257389l-168.708397 651.286076a9.604264 9.604264 0 0 0 1.974481 8.580459 10.043037 10.043037 0 0 0 8.04418 3.680822H613.552824a10.262424 10.262424 0 0 0 8.092933-3.680822 10.140542 10.140542 0 0 0 1.97448-8.580459L454.789959 360.281765a9.799274 9.799274 0 0 0-3.656445-5.070271 10.238047 10.238047 0 0 0-5.972194-1.950104 10.238047 10.238047 0 0 0-5.947819 1.950104 9.799274 9.799274 0 0 0-3.632069 5.070271" fill="#00E5E5"></path></svg><span>火山引擎</span></span>`;
 const MS_BUILTIN_IMAGE_MODELS = [
     'Tongyi-MAI/Z-Image-Turbo',
     'Qwen/Qwen-Image-2512',
@@ -667,7 +669,8 @@ function syncEditor(){
     item.id = nextId;
     if(oldId !== item.id) selectedId = item.id;
     item.name = nameInput.value.trim() || item.id;
-    const selectedProtocol = item.id === 'modelscope' ? 'openai' : item.id === 'runninghub' ? 'runninghub' : item.id === 'volcengine' ? 'volcengine' : item.id === 'jimeng' ? 'jimeng' : (protocolInput?.value || 'openai');
+    const rawProtocol = String(protocolInput?.value || item.protocol || 'openai').toLowerCase();
+    const selectedProtocol = item.id === 'modelscope' ? 'openai' : item.id === 'runninghub' ? 'runninghub' : item.id === 'volcengine' ? 'volcengine' : item.id === 'jimeng' ? 'jimeng' : (PROVIDER_PROTOCOL_OPTIONS.includes(rawProtocol) ? rawProtocol : 'openai');
     item.base_url = selectedProtocol === 'jimeng' ? '' : baseInput.value.trim();
     // 固定平台不从协议下拉读取
     item.protocol = selectedProtocol;
@@ -706,7 +709,8 @@ function updateProtocolFromInput(){
     const item = provider();
     if(!item || !protocolInput || item.id === 'modelscope' || item.id === 'runninghub' || item.id === 'volcengine' || item.id === 'jimeng') return;
     const value = String(protocolInput.value || 'openai').toLowerCase();
-    item.protocol = ['openai', 'apimart', 'gemini', 'volcengine', 'runninghub', 'jimeng'].includes(value) ? value : 'openai';
+    item.protocol = PROVIDER_PROTOCOL_OPTIONS.includes(value) ? value : 'openai';
+    item.protocol_manual = true;
     if(item.protocol === 'jimeng') item.base_url = '';
     document.body.classList.toggle('show-jimeng', item.protocol === 'jimeng');
     clearVerifyResult();
@@ -2206,8 +2210,7 @@ function renderProviderList(){
                 <button class="provider-card provider-card-banner ${active} ${stateClass}" type="button" onclick="selectProvider('${escapeHtml(item.id)}')">
                     <span class="provider-banner-inner">
                         <span class="provider-logo-wrap">
-                            <img src="/static/images/volcengine-theme-light.svg" alt="火山引擎" class="volcengine-icon ms-icon-light">
-                            <img src="/static/images/volcengine-theme-dark.svg" alt="火山引擎" class="volcengine-icon ms-icon-dark">
+                            ${VOLCENGINE_LOGO_SVG}
                             <span class="provider-logo-fallback">火山引擎</span>
                         </span>
                         <span class="provider-protocol-pill">Ark</span>
@@ -2297,6 +2300,7 @@ function renderEditor(){
     baseInput.value = item.base_url || '';
     if(protocolInput){
         protocolInput.value = item.id === 'runninghub' ? 'runninghub' : item.id === 'volcengine' ? 'volcengine' : item.id === 'jimeng' ? 'jimeng' : (item.protocol || 'openai');
+        applyDetectedProtocolFromUrl();
         protocolInput.disabled = FIXED_PROTOCOL_PROVIDER_IDS.has(item.id);
         protocolInput.title = protocolInput.disabled ? '内置平台使用固定协议' : '';
     }
@@ -2552,6 +2556,46 @@ function normalizeImageRequestMode(value){
 function imageRequestModeLabel(mode){
     return normalizeImageRequestMode(mode) === 'openai-json' ? 'OpenAI JSON' : 'OpenAI 标准';
 }
+function detectProviderProtocolFromUrl(baseUrl){
+    const url = String(baseUrl || baseInput?.value || '').trim().toLowerCase();
+    if(url.includes('linapi.net')){
+        return 'linapi';
+    }
+    if(url.includes('otuapi.com')){
+        return 'otuapi';
+    }
+    if(url.includes('grsai.dakka.com.cn') || url.includes('grsaiapi.com')){
+        return 'grsai';
+    }
+    if(url.includes('toapis.com')){
+        return 'toapis';
+    }
+    if(url.includes('baofu')){
+        return 'baofu';
+    }
+    if(url.includes('bananarouter.com')){
+        return 'bananarouter';
+    }
+    if(url.includes('relay.moonlyai.com')){
+        return 'moonly';
+    }
+    return '';
+}
+function shouldAutoDetectProviderProtocol(item){
+    if(!item || FIXED_PROTOCOL_PROVIDER_IDS.has(item.id)) return false;
+    if(item.protocol_locked === true || item.protocol_manual === true) return false;
+    const current = String(item.protocol || '').trim().toLowerCase();
+    return !current || current === 'openai';
+}
+function applyDetectedProtocolFromUrl(){
+    const item = provider();
+    if(!shouldAutoDetectProviderProtocol(item)) return false;
+    const detected = detectProviderProtocolFromUrl(baseInput?.value || item?.base_url || '');
+    if(!item || !detected || !PROVIDER_PROTOCOL_OPTIONS.includes(detected)) return false;
+    if(protocolInput) protocolInput.value = detected;
+    item.protocol = detected;
+    return true;
+}
 function isRunningHubContext(item, baseUrl=''){
     const protocol = String(protocolInput?.value || item?.protocol || '').trim().toLowerCase();
     const url = String(baseUrl || baseInput?.value || item?.base_url || '').trim().toLowerCase();
@@ -2572,10 +2616,11 @@ function applyDetectedImageRequestMode(mode){
 function applyDetectedProtocol(protocol){
     const item = provider();
     const detected = String(protocol || '').toLowerCase();
-    if(!item || !protocolInput || !['openai', 'apimart', 'gemini', 'volcengine', 'runninghub', 'jimeng'].includes(detected)) return false;
+    if(!item || !protocolInput || !PROVIDER_PROTOCOL_OPTIONS.includes(detected)) return false;
     if(String(protocolInput.value || '').toLowerCase() === detected && String(item.protocol || '').toLowerCase() === detected) return false;
     protocolInput.value = detected;
     item.protocol = detected;
+    item.protocol_manual = false;
     item.base_url = detected === 'jimeng' ? '' : (baseInput?.value.trim() || item.base_url || '');
     if(detected === 'volcengine'){
         item.video_models = unique(item.video_models || []);
@@ -2648,6 +2693,7 @@ async function probeAsync(){
                 chat: new Set(data.chat_models || []),
                 video: new Set(data.video_models || []),
             };
+            syncFetchedModelProtocols(data);
             const openBtn = document.getElementById('openPickerBtn');
             if(openBtn){ openBtn.disabled = false; openBtn.style.opacity = '1'; }
             showVerifyResult(`<span style="color:#15803d;font-size:11px;font-weight:800">✓ RunningHub OpenAPI 验证通过 · 找到 ${data.model_count || data.total || 0} 个模型${runninghubModelSourceNote(data)}</span>`);
@@ -2670,7 +2716,7 @@ async function probeAsync(){
         const detectedProtocol = String(data.protocol || '').toLowerCase();
         const isAsync = data.ok === true && detectedProtocol === 'apimart';
         const isOpenAiCompat = data.ok === true && detectedProtocol === 'openai';
-        const keepManualProtocol = ['gemini', 'volcengine', 'jimeng'].includes(currentProtocol);
+        const keepManualProtocol = ['gemini', 'linapi', 'otuapi', 'grsai', 'toapis', 'baofu', 'bananarouter', 'moonly', 'volcengine', 'jimeng'].includes(currentProtocol);
         if(protocolInput && !keepManualProtocol){
             applyDetectedProtocol(detectedProtocol || (isAsync ? 'apimart' : 'openai'));
         }
@@ -2687,7 +2733,7 @@ async function probeAsync(){
                 : detectedProtocol === 'openai'
                     ? 'OpenAI 兼容'
                     : keepManualProtocol
-                    ? (currentProtocol === 'gemini' ? 'Gemini' : currentProtocol.toUpperCase())
+                    ? (currentProtocol === 'gemini' ? 'Gemini' : currentProtocol === 'linapi' ? 'LinAPI协议' : currentProtocol === 'otuapi' ? 'OtuAPI协议' : currentProtocol === 'grsai' ? 'Grsai协议' : currentProtocol === 'toapis' ? 'ToAPIs协议' : currentProtocol === 'baofu' ? 'Baofu协议' : currentProtocol === 'bananarouter' ? 'BananaRouter协议' : currentProtocol === 'moonly' ? 'MoonlyAI协议' : currentProtocol.toUpperCase())
                     : 'OpenAI 兼容';
         showVerifyResult(`
             ${hideTasksEndpointTip ? '' : `<div style="font-size:11px;font-weight:800;color:${color}">${icon} ${escapeHtml(probeMessage)}</div>`}
@@ -2697,7 +2743,7 @@ async function probeAsync(){
                 <pre style="margin-top:6px;padding:10px 12px;border-radius:10px;background:var(--soft);border:1px solid var(--line-2);font-size:10.5px;font-family:ui-monospace,Menlo,monospace;white-space:pre-wrap;word-break:break-all;color:var(--text);max-height:200px;overflow:auto">${escapeHtml(rawJson)}</pre>
             </details>`);
     } catch(e){
-        const keepManualProtocol = ['gemini', 'volcengine', 'jimeng'].includes(String(protocolInput?.value || item.protocol || '').toLowerCase());
+        const keepManualProtocol = ['gemini', 'linapi', 'otuapi', 'grsai', 'toapis', 'baofu', 'bananarouter', 'moonly', 'volcengine', 'jimeng'].includes(String(protocolInput?.value || item.protocol || '').toLowerCase());
         if(protocolInput && !keepManualProtocol){ protocolInput.value = 'openai'; protocolInput.dispatchEvent(new Event('change')); }
         const suffix = keepManualProtocol ? '，已保留当前手动选择的协议' : '，协议已设为 OpenAI 兼容';
         showVerifyResult(`<div style="font-size:11px;font-weight:800;color:#b45309">⚠ ${escapeHtml(e.message || String(e))}${suffix}</div>`);
@@ -2744,6 +2790,7 @@ async function testConnection(){
                 chat: new Set(data.chat_models || []),
                 video: new Set(data.video_models || []),
             };
+            syncFetchedModelProtocols(data);
             const openBtn = document.getElementById('openPickerBtn');
             if(openBtn){ openBtn.disabled = false; openBtn.style.opacity = '1'; }
             const isRunningHubNow = runninghubContext || detectedProtocol === 'runninghub';
@@ -2770,6 +2817,33 @@ async function testConnection(){
 }
 let lastFetchedAll = [];          // 全部模型 id 列表
 let lastFetchedSuggestion = null; // 后端自动分类建议
+let lastFetchedModelProtocols = {};
+function syncFetchedModelProtocols(data){
+    lastFetchedModelProtocols = (data?.model_protocols && typeof data.model_protocols === 'object') ? {...data.model_protocols} : {};
+}
+function isLinApiContext(item){
+    const protocol = String(item?.protocol || protocolInput?.value || '').toLowerCase();
+    const url = String(item?.base_url || baseInput?.value || '').toLowerCase();
+    const name = String(item?.name || '').toLowerCase();
+    return protocol === 'linapi' || url.includes('linapi.net') || name.includes('linapi');
+}
+function implicitModelProtocol(item, model){
+    const name = String(model || '').trim();
+    const fetched = String(lastFetchedModelProtocols[name] || '').toLowerCase();
+    if(fetched === 'gemini' || fetched === 'openai') return fetched;
+    const lower = name.toLowerCase();
+    if(isLinApiContext(item) && lower === 'gpt-image-2') return 'openai';
+    if(isLinApiContext(item) && lower.startsWith('gemini-') && lower.includes('image-preview')) return 'gemini';
+    return '';
+}
+function applyImplicitModelProtocols(item, models){
+    if(!item) return;
+    if(!item.model_protocols || typeof item.model_protocols !== 'object') item.model_protocols = {};
+    for(const model of models || []){
+        const protocol = implicitModelProtocol(item, model);
+        if(protocol) item.model_protocols[String(model || '').trim()] = protocol;
+    }
+}
 
 async function fetchModels(){
     const item = provider();
@@ -2804,6 +2878,7 @@ async function fetchModels(){
             chat: new Set(data.chat_models || []),
             video: new Set(data.video_models || []),
         };
+        syncFetchedModelProtocols(data);
         const detectedProtocol = String(data.protocol || '').toLowerCase();
         if(detectedProtocol && detectedProtocol !== String(protocolInput?.value || '').toLowerCase()){
             applyDetectedProtocol(detectedProtocol);
@@ -2928,6 +3003,7 @@ function applyModelPicker(){
     item.image_models = image;
     item.chat_models = chat;
     item.video_models = video;
+    applyImplicitModelProtocols(item, image);
     renderModels('image'); renderModels('chat'); renderModels('video');
     renderMsLoras();
     setStatus(`已应用 · 生图 ${image.length} / LLM ${chat.length} / 视频 ${video.length}，点保存生效`);
@@ -3215,7 +3291,7 @@ async function saveProviders(){
             ? 'volcengine'
             : item.id === 'jimeng'
             ? 'jimeng'
-            : ['openai', 'apimart', 'gemini', 'volcengine', 'runninghub', 'jimeng'].includes(String(item.protocol || '').toLowerCase()) ? String(item.protocol).toLowerCase() : 'openai';
+            : PROVIDER_PROTOCOL_OPTIONS.includes(String(item.protocol || '').toLowerCase()) ? String(item.protocol).toLowerCase() : 'openai';
         item.image_request_mode = normalizeImageRequestMode(
             item.id === 'modelscope' || item.id === 'runninghub' || item.id === 'volcengine' || item.id === 'jimeng'
                 ? 'openai'
@@ -3259,6 +3335,7 @@ async function saveProviders(){
                 name:item.name,
                 base_url:item.base_url,
                 protocol:(item.id === 'modelscope') ? 'openai' : item.id === 'runninghub' ? 'runninghub' : item.id === 'volcengine' ? 'volcengine' : item.id === 'jimeng' ? 'jimeng' : (item.protocol || 'openai'),
+                protocol_manual:item.protocol_manual === true,
                 image_request_mode:item.image_request_mode || 'openai',
                 image_generation_endpoint:item.image_generation_endpoint || '',
                 image_edit_endpoint:item.image_edit_endpoint || '',

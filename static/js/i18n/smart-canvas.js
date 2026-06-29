@@ -269,7 +269,6 @@
         "smart.shortcutBoxSelect": { zh: "按住并拖拽框选节点", en: "Hold and drag to box-select nodes" },
         "smart.shortcutGroup": { zh: "合并选中的图片为组", en: "Group selected image nodes" },
         "smart.shortcutUngroup": { zh: "释放选中的分组", en: "Ungroup selected group nodes" },
-        "smart.shortcutUndo": { zh: "撤销上一步操作", en: "Undo the last action" },
         "smart.shortcutCopy": { zh: "复制选中的节点", en: "Copy selected nodes" },
         "smart.shortcutPaste": { zh: "粘贴节点或剪贴板图片", en: "Paste nodes or clipboard images" },
         "smart.shortcutAssets": { zh: "打开/关闭资源库", en: "Open/close the asset library" },

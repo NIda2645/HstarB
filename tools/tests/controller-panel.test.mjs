@@ -1,0 +1,41 @@
+﻿import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const js = readFileSync(new URL('../../static/js/canvas.js', import.meta.url), 'utf8');
+const html = readFileSync(new URL('../../static/canvas.html', import.meta.url), 'utf8');
+const css = readFileSync(new URL('../../static/css/canvas.css', import.meta.url), 'utf8');
+
+assert.match(html, /id="controllerPanel"\s+class="controller-panel"/, 'canvas should include floating controller panel container');
+assert.doesNotMatch(html, /id="globalMarkerToggle"/, 'top toolbar should not include the global marker entry');
+assert.match(html, /data-image-edit-mode="marker"/, 'image detail marker mode should remain available');
+assert.match(js, /function openControllerPanelForNode\(/, 'controller should expose floating panel opener');
+assert.match(js, /function renderControllerPanel\(/, 'controller should render floating parameter panel');
+assert.match(js, /function bindControllerPanel\(/, 'controller floating panel should bind parameter controls');
+assert.match(js, /function materialHueToDisplayHue\(/, 'controller material HSL preview should include hue display helper');
+assert.match(js, /function (fitControllerPanelToViewport|applyControllerPanelViewportFit)\(/, 'controller floating panel should adapt to viewport density');
+assert.match(js, /function bindAngleCubeDrag\(/, 'controller angle panel should support cube drag interaction');
+assert.match(js, /function (bindLightDirectionDrag|bindLightDotDrag|bindLightKnobDrag)\(/, 'controller lighting panel should support direction drag interaction');
+assert.match(js, /class="controller-open-panel"/, 'controller node should include floating-window button');
+assert.match(js, /data-controller-collapse/, 'floating panel should support collapse');
+assert.match(js, /if\(!label \|\| !CANVAS_GENERATOR_TYPES\.includes\(node\.type\)\) return;/, 'controller effect badge should appear only on generator nodes, not output nodes');
+assert.match(js, /function visiblePromptInputsForNode\(sources=\[\]\)\{[\s\S]*src\.type !== 'controller'/, 'controller directives should be hidden from prompt preview UI');
+assert.doesNotMatch(js, /renderPromptPreview\([^\n]+sources\.filter\(src => src\.prompt && !src\.refs\?\.length\)/, 'prompt preview refresh should use controller-aware filtering');
+assert.match(js, /function render\(\)[\s\S]*refreshOutputTimer\(\);\s*refreshControllerEffectBadges\(\);/, 'full render should restore controller effect badges');
+assert.match(js, /function refreshNodes\(ids=\[\]\)[\s\S]*refreshOutputTimer\(\);\s*refreshControllerEffectBadges\(\);/, 'partial node refresh should restore controller effect badges');
+assert.match(css, /\.controller-panel\.open/, 'controller panel open style should exist');
+assert.match(css, /\.controller-panel\.collapsed/, 'controller panel collapsed style should exist');
+assert.match(css, /\.controller-panel-tabs/, 'controller panel tab style should exist');
+assert.match(css, /\.light-3d-stage/, 'controller lighting panel should include the full 3D lighting preview styles');
+assert.match(css, /\.material-hsl-panel/, 'controller material panel should include HSL adjustment styles');
+assert.match(css, /\.controller-panel\.fit-dense/, 'controller panel should include dense viewport fit styles');
+assert.match(css, /\.theme-dark \.prompt-rich-input,/, 'rich prompt editor should inherit dark mode input styling');
+assert.match(css, /\.theme-dark \.prompt-rich-input:empty::before/, 'rich prompt placeholder should be readable in dark mode');
+assert.match(css, /\.node\.controller-node\s+\.controller-tabs\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s, 'controller node switch panel should keep a stable two-column grid');
+assert.match(css, /\.node\.controller-node\s*\{[^}]*width:\s*300px[^}]*max-width:\s*300px/s, 'controller node switch panel should stay narrow');
+assert.match(js, /type:'controller'[^}]*w:300/, 'new controller nodes should use the narrow default width');
+assert.match(css, /\.node\.controller-node\s+\.controller-tab\s*\{[^}]*grid-template-columns:\s*minmax\(0,1fr\)\s+36px/s, 'controller node tabs should reserve a fixed switch column');
+assert.match(css, /\.node\.controller-node\s+\.controller-tab-label\s*\{[^}]*font-size:\s*12px[^}]*line-height:\s*1/s, 'controller node tab labels should use compact stable typography');
+assert.match(css, /\.node\.controller-node\s+\.controller-tab-state\s*\{[^}]*font-size:\s*9px[^}]*line-height:\s*1/s, 'controller node tab state text should use compact stable typography');
+assert.match(css, /\.node\.controller-node\s+\.controller-tab-switch\s*\{[^}]*width:\s*34px[^}]*height:\s*20px/s, 'controller node switch should stay compact');
+
+console.log('controller floating panel tests passed');

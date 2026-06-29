@@ -10,6 +10,7 @@ import urllib.error
 import os
 import re
 import random
+import secrets
 import sys
 import subprocess
 import time
@@ -161,6 +162,8 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 GLOBAL_LOOP = None
+COLLABORATION_KEY = secrets.token_urlsafe(24)
+COLLABORATION_LOCK = Lock()
 APP_VERSION = "2026.06.03"
 GITHUB_REPO_URL = "https://github.com/hero8152/Infinite-Canvas"
 GITHUB_VERSION_URL = "https://raw.githubusercontent.com/hero8152/Infinite-Canvas/main/VERSION"
@@ -180,6 +183,7 @@ MODELSCOPE_TREE_URL = "https://www.modelscope.ai/api/v1/studio/daniel8152/Infini
 async def startup_event():
     global GLOBAL_LOOP
     GLOBAL_LOOP = asyncio.get_running_loop()
+    rotate_collaboration_key()
     sync_static_html_versions()
     # 启动时整理资产库：给所有图片分组（含默认角色/场景）建好文件夹，并把根目录里的旧素材归整进去。
     try:
@@ -215,6 +219,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str = None):
 
 CLIENT_ID = str(uuid.uuid4())
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_APP_DATA_ROOT = os.path.join(os.environ.get("APPDATA") or BASE_DIR, "Hstar")
+APP_DATA_ROOT = os.path.abspath(os.environ.get("HSTAR_DATA_DIR") or DEFAULT_APP_DATA_ROOT)
 WORKFLOW_DIR = os.path.join(BASE_DIR, "workflows")
 WORKFLOW_PATH = os.path.join(WORKFLOW_DIR, "Z-Image.json")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -222,24 +228,84 @@ STATIC_RUNNINGHUB_DIR = os.path.join(STATIC_DIR, "runninghub")
 STATIC_RUNNINGHUB_THUMBNAIL_DIR = os.path.join(STATIC_RUNNINGHUB_DIR, "thumbnails")
 STATIC_RUNNINGHUB_API_PROVIDERS_FILE = os.path.join(STATIC_RUNNINGHUB_DIR, "api_providers.json")
 STATIC_RUNNINGHUB_MODEL_REGISTRY_FILE = os.path.join(STATIC_RUNNINGHUB_DIR, "models_registry.json")
-OUTPUT_DIR = os.path.join(BASE_DIR, "output")
-ASSETS_DIR = os.path.join(BASE_DIR, "assets")
-OUTPUT_INPUT_DIR = os.path.join(ASSETS_DIR, "input")
-OUTPUT_OUTPUT_DIR = os.path.join(ASSETS_DIR, "output")
-ASSET_LIBRARY_DIR = os.path.join(ASSETS_DIR, "library")
-LOCAL_UPLOAD_DIR = os.path.join(ASSETS_DIR, "uploads")
-HISTORY_FILE = os.path.join(BASE_DIR, "history.json")
+APP_DATA_DIR = os.path.join(APP_DATA_ROOT, "data")
+APP_SOFTWARE_SETTINGS_FILE = os.path.join(APP_DATA_DIR, "software_settings.json")
+
+def bootstrap_app_software_settings() -> None:
+    legacy_file = os.path.join(BASE_DIR, "data", "software_settings.json")
+    if os.path.abspath(legacy_file) == os.path.abspath(APP_SOFTWARE_SETTINGS_FILE):
+        return
+    if os.path.exists(APP_SOFTWARE_SETTINGS_FILE) or not os.path.isfile(legacy_file):
+        return
+    try:
+        os.makedirs(os.path.dirname(APP_SOFTWARE_SETTINGS_FILE), exist_ok=True)
+        shutil.copy2(legacy_file, APP_SOFTWARE_SETTINGS_FILE)
+    except Exception:
+        pass
+
+bootstrap_app_software_settings()
+
+def runtime_paths_for_storage_root(storage_root: str, software_settings_file: str) -> Dict[str, str]:
+    storage_root = os.path.abspath(storage_root)
+    data_dir = os.path.join(storage_root, "data")
+    assets_dir = os.path.join(storage_root, "assets")
+    return {
+        "storage_root": storage_root,
+        "data_dir": data_dir,
+        "conversation_dir": os.path.join(data_dir, "conversations"),
+        "canvas_dir": os.path.join(data_dir, "canvases"),
+        "media_preview_dir": os.path.join(data_dir, "media_previews"),
+        "asset_library_path": os.path.join(data_dir, "asset_library.json"),
+        "prompt_library_path": os.path.join(data_dir, "prompt_libraries.json"),
+        "api_providers_file": os.path.join(data_dir, "api_providers.json"),
+        "runninghub_workflow_store_file": os.path.join(data_dir, "runninghub_workflows.json"),
+        "shared_folders_file": os.path.join(data_dir, "shared_folders.json"),
+        "software_settings_file": os.path.abspath(software_settings_file),
+        "global_config_file": os.path.join(storage_root, "global_config.json"),
+        "history_file": os.path.join(storage_root, "history.json"),
+        "assets_dir": assets_dir,
+        "output_dir": os.path.join(storage_root, "output"),
+        "output_input_dir": os.path.join(assets_dir, "input"),
+        "output_output_dir": os.path.join(assets_dir, "output"),
+        "asset_library_dir": os.path.join(assets_dir, "library"),
+        "local_upload_dir": os.path.join(assets_dir, "uploads"),
+    }
+
+def resolve_runtime_paths(base_dir: str, software_settings_file: str) -> Dict[str, str]:
+    storage_root = base_dir
+    try:
+        with open(software_settings_file, "r", encoding="utf-8") as f:
+            settings = json.load(f)
+        configured_root = settings.get("storage_root") if isinstance(settings, dict) else ""
+        if isinstance(configured_root, str) and configured_root.strip():
+            storage_root = os.path.abspath(os.path.expandvars(os.path.expanduser(configured_root.strip().strip('"'))))
+    except Exception:
+        pass
+    return runtime_paths_for_storage_root(storage_root, software_settings_file)
+
+RUNTIME_PATHS = resolve_runtime_paths(BASE_DIR, APP_SOFTWARE_SETTINGS_FILE)
+STORAGE_ROOT = RUNTIME_PATHS["storage_root"]
+OUTPUT_DIR = RUNTIME_PATHS["output_dir"]
+ASSETS_DIR = RUNTIME_PATHS["assets_dir"]
+OUTPUT_INPUT_DIR = RUNTIME_PATHS["output_input_dir"]
+OUTPUT_OUTPUT_DIR = RUNTIME_PATHS["output_output_dir"]
+ASSET_LIBRARY_DIR = RUNTIME_PATHS["asset_library_dir"]
+LOCAL_UPLOAD_DIR = RUNTIME_PATHS["local_upload_dir"]
+HISTORY_FILE = RUNTIME_PATHS["history_file"]
 API_ENV_FILE = os.path.join(BASE_DIR, "API", ".env")
-DATA_DIR = os.path.join(BASE_DIR, "data")
-CONVERSATION_DIR = os.path.join(DATA_DIR, "conversations")
-CANVAS_DIR = os.path.join(DATA_DIR, "canvases")
-MEDIA_PREVIEW_DIR = os.path.join(DATA_DIR, "media_previews")
-ASSET_LIBRARY_PATH = os.path.join(DATA_DIR, "asset_library.json")
-PROMPT_LIBRARY_PATH = os.path.join(DATA_DIR, "prompt_libraries.json")
-API_PROVIDERS_FILE = os.path.join(DATA_DIR, "api_providers.json")
-RUNNINGHUB_WORKFLOW_STORE_FILE = os.path.join(DATA_DIR, "runninghub_workflows.json")
-SHARED_FOLDERS_FILE = os.path.join(DATA_DIR, "shared_folders.json")
-GLOBAL_CONFIG_FILE = os.path.join(BASE_DIR, "global_config.json")
+DATA_DIR = RUNTIME_PATHS["data_dir"]
+CONVERSATION_DIR = RUNTIME_PATHS["conversation_dir"]
+CANVAS_DIR = RUNTIME_PATHS["canvas_dir"]
+MEDIA_PREVIEW_DIR = RUNTIME_PATHS["media_preview_dir"]
+ASSET_LIBRARY_PATH = RUNTIME_PATHS["asset_library_path"]
+PROMPT_LIBRARY_PATH = RUNTIME_PATHS["prompt_library_path"]
+API_PROVIDERS_FILE = RUNTIME_PATHS["api_providers_file"]
+RUNNINGHUB_WORKFLOW_STORE_FILE = RUNTIME_PATHS["runninghub_workflow_store_file"]
+SHARED_FOLDERS_FILE = RUNTIME_PATHS["shared_folders_file"]
+SOFTWARE_SETTINGS_FILE = RUNTIME_PATHS["software_settings_file"]
+GLOBAL_CONFIG_FILE = RUNTIME_PATHS["global_config_file"]
+PROJECTS_PATH = os.path.join(DATA_DIR, "projects.json")
+DEFAULT_PROJECT_ID = "default"
 CANVAS_TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 LOCAL_IMAGE_IMPORT_MAX_BYTES = int(os.getenv("LOCAL_IMAGE_IMPORT_MAX_BYTES", str(50 * 1024 * 1024)))
 LOCAL_IMAGE_IMPORT_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
@@ -263,13 +329,12 @@ JIMENG_LOGIN_SESSION = {
 }
 
 PROVIDER_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{2,40}$")
-SUPPORTED_PROVIDER_PROTOCOLS = {"openai", "apimart", "gemini", "volcengine", "runninghub", "jimeng"}
+SUPPORTED_PROVIDER_PROTOCOLS = {"openai", "apimart", "gemini", "linapi", "otuapi", "grsai", "toapis", "baofu", "bananarouter", "moonly", "volcengine", "runninghub", "jimeng", "lingjing"}
 SUPPORTED_IMAGE_REQUEST_MODES = {"openai", "openai-json"}
 RUNNINGHUB_DEFAULT_BASE_URL = "https://www.runninghub.cn"
 RUNNINGHUB_OPENAPI_BASE_URL = "https://www.runninghub.cn/openapi/v2"
 RUNNINGHUB_MODEL_REGISTRY_URL = "https://raw.githubusercontent.com/HM-RunningHub/ComfyUI_RH_OpenAPI/main/models_registry.json"
 RUNNINGHUB_LLM_BASE_URL = "https://llm.runninghub.cn/v1"
-LINGJING_DEFAULT_BASE_URL = "https://apistudio.vip"
 RUNNINGHUB_LLM_MODELS_URLS = [
     "https://llm.runninghub.cn/v1/models",
     "https://llm.runninghub.ai/v1/models",
@@ -280,6 +345,15 @@ RUNNINGHUB_FALLBACK_CHAT_MODELS = [
     "qwen/qwen-plus",
     "openai/gpt-5.1",
 ]
+LINAPI_DEFAULT_BASE_URL = "https://api.linapi.net"
+GRSAI_IMAGE_MODELS = [
+    "nano-banana-pro",
+    "nano-banana-pro-4k-vip",
+    "nano-banana-2",
+    "gpt-image-2",
+    "gpt-image-2-vip",
+]
+
 JIMENG_DEFAULT_IMAGE_MODELS = [
     "5.0",
     "4.6",
@@ -754,23 +828,6 @@ def default_api_providers():
             "volcengine_project_name": VOLCENGINE_DEFAULT_PROJECT_NAME,
             "volcengine_region": VOLCENGINE_DEFAULT_REGION,
         },
-        {
-            "id": "lingjing",
-            "name": "灵境API",
-            "base_url": LINGJING_DEFAULT_BASE_URL,
-            "protocol": "openai",
-            "image_request_mode": "openai",
-            "image_generation_endpoint": "",
-            "image_edit_endpoint": "",
-            "enabled": True,
-            "primary": False,
-            "image_models": ["gpt-image-2", "gemini-3.1-flash-image-preview", "gemini-3-pro-image-preview"],
-            "chat_models": ["gpt-5.5"],
-            "video_models": ["veo3.1-fast"],
-            "model_protocols": {"gemini-3.1-flash-image-preview": "gemini", "gemini-3-pro-image-preview": "gemini"},
-            "ms_loras": [],
-            "ms_defaults_version": 0,
-        },
     ]
 
 def merge_default_api_providers(providers):
@@ -832,23 +889,6 @@ def merge_default_api_providers(providers):
             current["protocol"] = "volcengine"
             current["volcengine_project_name"] = str(current.get("volcengine_project_name") or VOLCENGINE_DEFAULT_PROJECT_NAME).strip() or VOLCENGINE_DEFAULT_PROJECT_NAME
             current["volcengine_region"] = str(current.get("volcengine_region") or VOLCENGINE_DEFAULT_REGION).strip() or VOLCENGINE_DEFAULT_REGION
-    lingjing_default = next((d for d in default_api_providers() if d["id"] == "lingjing"), None)
-    if lingjing_default:
-        current = next((item for item in merged if item.get("id") == "lingjing"), None)
-        if not current:
-            merged.append(lingjing_default)
-        else:
-            if not current.get("base_url"):
-                current["base_url"] = lingjing_default["base_url"]
-            if not current.get("protocol"):
-                current["protocol"] = "openai"
-            current["image_request_mode"] = normalize_image_request_mode(current.get("image_request_mode"))
-            current["image_models"] = model_list_from_values([*(current.get("image_models") or []), *(lingjing_default.get("image_models") or [])])
-            current["chat_models"] = model_list_from_values([*(current.get("chat_models") or []), *(lingjing_default.get("chat_models") or [])])
-            current["video_models"] = model_list_from_values([*(current.get("video_models") or []), *(lingjing_default.get("video_models") or [])])
-            protocols = normalize_model_protocols(current.get("model_protocols"))
-            protocols.update(normalize_model_protocols(lingjing_default.get("model_protocols")))
-            current["model_protocols"] = protocols
     # 即梦 CLI 不再是强制保留的默认平台：仅在用户已添加了即梦协议的平台时，规范化其默认模型/地址。
     for current in merged:
         if not is_jimeng_provider(current):
@@ -863,6 +903,20 @@ def merge_default_api_providers(providers):
             *[item for item in (current.get("video_models") or []) if str(item or "").strip() not in JIMENG_LEGACY_VIDEO_MODELS],
             *JIMENG_DEFAULT_VIDEO_MODELS,
         ])
+    for current in merged:
+        if not is_linapi_provider(current):
+            continue
+        current["image_models"] = model_list_from_values(current.get("image_models") or [])
+        current["chat_models"] = model_list_from_values(current.get("chat_models") or [])
+        current["video_models"] = model_list_from_values(current.get("video_models") or [])
+        selected_models = {*current["image_models"], *current["chat_models"]}
+        protocols = {k: v for k, v in normalize_model_protocols(current.get("model_protocols")).items() if k in selected_models}
+        for model in selected_models:
+            if is_linapi_gpt_image_model(model):
+                protocols.setdefault(model, "openai")
+            elif is_linapi_gemini_image_model(model):
+                protocols.setdefault(model, "gemini")
+        current["model_protocols"] = protocols
     return merged
 
 def normalize_model_list(values):
@@ -1018,10 +1072,13 @@ def merge_runninghub_system_entries(system_entries, user_entries, kind):
     merged = []
     index = {}
     hidden_ids = set()
+    visible_user_ids = set()
+    system_ids = set()
     for entry in apply_runninghub_system_thumbnails(system_entries or [], kind):
         entry_id = runninghub_entry_id(entry, kind)
         if not entry_id:
             continue
+        system_ids.add(entry_id)
         index[entry_id] = len(merged)
         merged.append(entry)
     for entry in apply_runninghub_system_thumbnails(user_entries or [], kind):
@@ -1034,13 +1091,32 @@ def merge_runninghub_system_entries(system_entries, user_entries, kind):
                 merged.pop(index[entry_id])
                 index = {runninghub_entry_id(item, kind): idx for idx, item in enumerate(merged)}
             continue
+        visible_user_ids.add(entry_id)
         if entry_id in index:
             merged[index[entry_id]] = merge_runninghub_entry_overlay(merged[index[entry_id]], entry)
         else:
             index[entry_id] = len(merged)
             merged.append(entry)
+    if system_ids and system_ids.issubset(hidden_ids) and not (visible_user_ids - system_ids):
+        hidden_ids.clear()
+        merged = []
+        index = {}
+        for entry in apply_runninghub_system_thumbnails(system_entries or [], kind):
+            entry_id = runninghub_entry_id(entry, kind)
+            if not entry_id:
+                continue
+            index[entry_id] = len(merged)
+            merged.append(entry)
+        for entry in apply_runninghub_system_thumbnails(user_entries or [], kind):
+            entry_id = runninghub_entry_id(entry, kind)
+            if not entry_id or entry.get("hidden") is True:
+                continue
+            if entry_id in index:
+                merged[index[entry_id]] = merge_runninghub_entry_overlay(merged[index[entry_id]], entry)
+            else:
+                index[entry_id] = len(merged)
+                merged.append(entry)
     return [entry for entry in merged if runninghub_entry_id(entry, kind) not in hidden_ids]
-
 def load_static_runninghub_provider():
     if not os.path.exists(STATIC_RUNNINGHUB_API_PROVIDERS_FILE):
         return None
@@ -1110,6 +1186,24 @@ def normalize_image_request_mode(value):
     mode = str(value or "").strip().lower()
     return mode if mode in SUPPORTED_IMAGE_REQUEST_MODES else "openai"
 
+def inferred_provider_protocol_from_base_url(base_url):
+    url = str(base_url or "").strip().lower()
+    if "linapi.net" in url:
+        return "linapi"
+    if "otuapi.com" in url:
+        return "otuapi"
+    if "grsai.dakka.com.cn" in url or "grsaiapi.com" in url:
+        return "grsai"
+    if "toapis.com" in url:
+        return "toapis"
+    if "baofu" in url:
+        return "baofu"
+    if "bananarouter.com" in url:
+        return "bananarouter"
+    if "relay.moonlyai.com" in url:
+        return "moonly"
+    return ""
+
 def provider_endpoint_url(provider, key, default_path):
     base_url = str((provider or {}).get("base_url") or AI_BASE_URL).strip().rstrip("/")
     override = str((provider or {}).get(key) or "").strip()
@@ -1152,6 +1246,11 @@ def normalize_provider(item):
     if base_url and not re.match(r"^https?://", base_url):
         raise HTTPException(status_code=400, detail=f"{name} 的 Base URL 需要以 http:// 或 https:// 开头")
     protocol = str(item.get("protocol") or "openai").strip().lower()
+    protocol_manual = bool(item.get("protocol_manual", False))
+    if not protocol_manual and protocol in {"", "openai"}:
+        inferred_protocol = inferred_provider_protocol_from_base_url(base_url)
+        if inferred_protocol:
+            protocol = inferred_protocol
     if protocol not in SUPPORTED_PROVIDER_PROTOCOLS:
         protocol = "openai"
     image_request_mode = detect_image_request_mode(base_url, item.get("image_models") or []) or normalize_image_request_mode(item.get("image_request_mode"))
@@ -1175,6 +1274,7 @@ def normalize_provider(item):
         "name": name,
         "base_url": base_url,
         "protocol": protocol,
+        "protocol_manual": protocol_manual,
         "image_request_mode": image_request_mode,
         "image_generation_endpoint": image_generation_endpoint,
         "image_edit_endpoint": image_edit_endpoint,
@@ -1197,7 +1297,7 @@ def load_api_providers():
     if not os.path.exists(API_PROVIDERS_FILE):
         return merge_default_api_providers(defaults)
     try:
-        with open(API_PROVIDERS_FILE, "r", encoding="utf-8") as f:
+        with open(API_PROVIDERS_FILE, "r", encoding="utf-8-sig") as f:
             raw = json.load(f)
         providers = [normalize_provider(item) for item in raw if isinstance(item, dict)]
         return merge_default_api_providers(providers or defaults)
@@ -1360,7 +1460,7 @@ def current_app_version():
     try:
         if os.path.exists(version_file):
             with open(version_file, "r", encoding="utf-8") as f:
-                version = (f.read().strip().splitlines() or [""])[0].strip()
+                version = (f.read().lstrip('\ufeff').strip().splitlines() or [""])[0].strip().lstrip('\ufeff')
                 if version:
                     return version
     except Exception:
@@ -2473,6 +2573,7 @@ class ApiProviderPayload(BaseModel):
     name: str = ""
     base_url: str = ""
     protocol: str = "openai"
+    protocol_manual: bool = False
     image_request_mode: str = "openai"
     image_generation_endpoint: str = ""
     image_edit_endpoint: str = ""
@@ -2543,9 +2644,6 @@ class CanvasCreateRequest(BaseModel):
     title: str = "未命名画布"
     icon: str = "🧩"
     kind: str = "classic"
-    project: Optional[str] = None
-    board_x: Optional[float] = None
-    board_y: Optional[float] = None
 
 class CanvasMetaUpdate(BaseModel):
     title: Optional[str] = None
@@ -2582,6 +2680,41 @@ class CanvasAssetDownloadRequest(BaseModel):
     urls: List[str] = []
     items: List[Dict[str, Any]] = []
     filename: str = "canvas-output-images.zip"
+
+class ImageMarkerIdentifyRequest(BaseModel):
+    image_url: str = ""
+    thumbnail: str = ""
+    x: float = 0
+    y: float = 0
+    number: int = 0
+    provider: str = "comfly"
+    model: str = ""
+    ms_model: str = ""
+
+class ExternalAppSaveRequest(BaseModel):
+    app: str = "custom"
+    path: str = ""
+
+class ExternalImageOpenRequest(BaseModel):
+    url: str = ""
+    app: str = "custom"
+
+class SaveOutputAsRequest(BaseModel):
+    url: str = ""
+    name: str = "output.png"
+    initial_dir: str = ""
+    content_base64: str = ""
+
+class SoftwareStorageRequest(BaseModel):
+    storage_root: str = ""
+
+class NativeFolderRequest(BaseModel):
+    initial_dir: str = ""
+    purpose: str = ""
+
+class SaveOutputBatchRequest(BaseModel):
+    items: List[Dict[str, Any]] = []
+    initial_dir: str = ""
 
 class CanvasWorkflowExportRequest(BaseModel):
     nodes: List[Dict[str, Any]] = []
@@ -3074,10 +3207,6 @@ def save_canvas(canvas):
 def normalize_canvas_kind(kind="classic"):
     return "smart" if str(kind or "").strip().lower() == "smart" else "classic"
 
-# ===== 项目（按项目分类管理画布）=====
-PROJECTS_PATH = os.path.join(DATA_DIR, "projects.json")
-DEFAULT_PROJECT_ID = "default"
-
 def load_projects():
     try:
         with open(PROJECTS_PATH, 'r', encoding='utf-8') as f:
@@ -3463,7 +3592,7 @@ def api_headers(json_body=True, provider=None, model=""):
         api_key = AI_API_KEY
         if not api_key:
             raise HTTPException(status_code=400, detail="未配置 COMFLY_API_KEY，请在 API/.env 中填写。")
-    if provider and effective_protocol(provider, model) == "gemini":
+    if provider and effective_protocol(provider, model) == "gemini" and not is_linapi_provider(provider):
         headers = {"Accept": "application/json", "x-goog-api-key": api_key}
     else:
         headers = {"Accept": "application/json", "Authorization": bearer_auth_value(api_key)}
@@ -3569,10 +3698,20 @@ def looks_like_generated_image_url(value):
     clean = text.split("?", 1)[0].split("#", 1)[0].lower()
     return text.startswith(("http://", "https://", "/output/", "/assets/")) and re.search(r"\.(png|jpe?g|webp|gif|bmp|tiff?)$", clean)
 
+def markdown_image_data_url(value):
+    text = str(value or "")
+    match = re.search(r"!\[[^\]]*\]\((data:image/[^;\s)]+;base64,[A-Za-z0-9+/=\s]+)\)", text)
+    if not match:
+        return ""
+    return re.sub(r"\s+", "", match.group(1))
+
 def extract_image_flexible(value, depth=0):
     if depth > 8 or value is None:
         return None
     if isinstance(value, str):
+        markdown_url = markdown_image_data_url(value)
+        if markdown_url:
+            return {"type": "url", "value": markdown_url}
         return {"type": "url", "value": value} if looks_like_generated_image_url(value) else None
     if isinstance(value, list):
         for item in value:
@@ -3620,6 +3759,10 @@ def extract_images(data):
         if depth > 8 or value is None:
             return
         if isinstance(value, str):
+            markdown_url = markdown_image_data_url(value)
+            if markdown_url:
+                add_image({"type": "url", "value": markdown_url})
+                return
             if looks_like_generated_image_url(value):
                 add_image({"type": "url", "value": value})
             return
@@ -3658,6 +3801,9 @@ def extract_images(data):
             for part in parts:
                 if not isinstance(part, dict):
                     continue
+                markdown_url = markdown_image_data_url(part.get("text"))
+                if markdown_url:
+                    add_image({"type": "url", "value": markdown_url})
                 inline = part.get("inlineData") or part.get("inline_data") or {}
                 if not isinstance(inline, dict):
                     continue
@@ -3693,12 +3839,11 @@ def extract_images(data):
     raise HTTPException(status_code=502, detail="无法识别生图接口返回格式")
 
 def extract_image(data):
-    try:
-        images = extract_images(data)
-        if images:
-            return images[0]
-    except HTTPException:
-        pass
+    if isinstance(data, dict) and isinstance(data.get("url"), str) and data.get("url"):
+        return {"type": "url", "value": data["url"]}
+    flexible = extract_image_flexible(data)
+    if flexible:
+        return flexible
     candidates = data.get("candidates") if isinstance(data, dict) else None
     if isinstance(candidates, list):
         for candidate in candidates:
@@ -3711,6 +3856,12 @@ def extract_image(data):
             for part in parts:
                 if not isinstance(part, dict):
                     continue
+                markdown_url = markdown_image_data_url(part.get("text"))
+                if markdown_url:
+                    return {"type": "url", "value": markdown_url}
+                image_url = part.get("image_url") or part.get("imageUrl") or {}
+                if isinstance(image_url, dict) and image_url.get("url"):
+                    return {"type": "url", "value": image_url["url"]}
                 inline = part.get("inlineData") or part.get("inline_data") or {}
                 if not isinstance(inline, dict):
                     continue
@@ -3724,6 +3875,13 @@ def extract_image(data):
     if isinstance(data.get("data"), dict) and isinstance(data["data"].get("result"), dict):
         data = data["data"]
     if isinstance(data.get("result"), dict):
+        result_data = data["result"].get("data") or []
+        if result_data:
+            first = result_data[0]
+            if isinstance(first, dict):
+                url = first.get("url") or first.get("image_url") or first.get("imageUrl")
+                if isinstance(url, str) and url:
+                    return {"type": "url", "value": url}
         result_images = data["result"].get("images") or []
         if result_images:
             first = result_images[0]
@@ -3732,9 +3890,6 @@ def extract_image(data):
                 return {"type": "url", "value": url[0]}
             if isinstance(url, str) and url:
                 return {"type": "url", "value": url}
-    flexible = extract_image_flexible(data)
-    if flexible:
-        return flexible
     if isinstance(data.get("data"), dict) and isinstance(data["data"].get("data"), dict):
         data = data["data"]["data"]
     images = data.get("data") or []
@@ -3745,9 +3900,6 @@ def extract_image(data):
         return {"type": "url", "value": first["url"]}
     if first.get("b64_json"):
         return {"type": "b64", "value": first["b64_json"]}
-    flexible = extract_image_flexible(first)
-    if flexible:
-        return flexible
     raise HTTPException(status_code=502, detail="无法识别生图接口返回格式")
 
 def extract_task_id(data):
@@ -3826,6 +3978,163 @@ def effective_image_request_mode(provider, model=""):
 
 def is_gemini_provider(provider):
     return provider_protocol(provider) == "gemini"
+
+def is_linapi_protocol(provider):
+    return provider_protocol(provider) == "linapi" or is_linapi_provider(provider)
+
+def is_linapi_provider(provider):
+    protocol = str((provider or {}).get("protocol") or "").strip().lower()
+    base_url = str((provider or {}).get("base_url") or "").strip().lower()
+    name = str((provider or {}).get("name") or "").strip().lower()
+    pid = str((provider or {}).get("id") or "").strip().lower()
+    return protocol == "linapi" or "linapi.net" in base_url or "linapi" in name or pid == "linapi"
+
+def linapi_base_url(provider):
+    base_url = str((provider or {}).get("base_url") or "").strip().rstrip("/")
+    if not base_url:
+        return LINAPI_DEFAULT_BASE_URL
+    try:
+        parsed = urllib.parse.urlsplit(base_url)
+        host = parsed.netloc.lower()
+        if host in {"linapi.net", "www.linapi.net"}:
+            return LINAPI_DEFAULT_BASE_URL
+    except Exception:
+        pass
+    return base_url
+
+def linapi_model_for_request(model):
+    name = str(model or "").strip()
+    normalized = name.lower().replace("_", "-")
+    if normalized in {"gpt-image-2-4k", "gpt-image-2-2k", "gpt-image-2-high"}:
+        return "gpt-image-2"
+    return name or "gpt-image-2"
+
+def is_linapi_gpt_image_model(model):
+    return is_gpt_image_2_model(model)
+
+def is_linapi_gemini_image_model(model):
+    normalized = str(model or "").strip().lower()
+    return normalized.startswith("gemini-") and "image-preview" in normalized
+
+async def generate_linapi_provider_image(prompt, size, model, reference_images=None, provider=None, quality=""):
+    model_name = linapi_model_for_request(model)
+    request_size = normalize_gpt_image_2_size(size)
+    gen_url = provider_endpoint_url(provider, "image_generation_endpoint", "/v1/images/generations")
+    edit_url = provider_endpoint_url(provider, "image_edit_endpoint", "/v1/images/edits")
+    refs = [ref for ref in (reference_images or []) if ref.get("url")]
+    mask_refs = [ref for ref in refs if str(ref.get("role") or "").strip().lower() == "mask" or str(ref.get("name") or "").lower().endswith("_mask.png")]
+    image_refs = [ref for ref in refs if ref not in mask_refs]
+    quality = str(quality or "").strip().lower()
+    if quality not in {"auto", "low", "medium", "high"}:
+        quality = "auto"
+    timeout = httpx.Timeout(connect=20.0, read=1800.0, write=180.0, pool=20.0)
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        if image_refs:
+            files = []
+            opened = []
+            try:
+                for ref in image_refs[:4]:
+                    path = output_file_from_url(ref.get("url", ""))
+                    if not path:
+                        continue
+                    fh = open(path, "rb")
+                    opened.append(fh)
+                    files.append(("image", (os.path.basename(path), fh, content_type_for_path(path))))
+                if mask_refs:
+                    mask_path = output_file_from_url(mask_refs[0].get("url", ""))
+                    if mask_path:
+                        fh = open(mask_path, "rb")
+                        opened.append(fh)
+                        files.append(("mask", (os.path.basename(mask_path), fh, content_type_for_path(mask_path))))
+                if not files:
+                    raise HTTPException(status_code=400, detail="LinAPI 图生图需要可读取的本地参考图片文件")
+                data = {"model": model_name, "prompt": prompt, "size": request_size, "quality": quality, "background": "auto", "output_format": "png"}
+                response = await client.post(edit_url, headers=api_headers(json_body=False, provider=provider, model=model_name), data=data, files=files)
+            finally:
+                for fh in opened:
+                    fh.close()
+        else:
+            body = {"model": model_name, "prompt": prompt, "size": request_size, "quality": quality, "background": "auto", "output_format": "png"}
+            response = await client.post(gen_url, headers=api_headers(provider=provider, model=model_name), json=body)
+        response.raise_for_status()
+        raw = response.json()
+        return extract_image(raw), raw
+
+def is_routin_provider(provider):
+    base_url = str((provider or {}).get("base_url") or "").strip().lower()
+    name = str((provider or {}).get("name") or "").strip().lower()
+    pid = str((provider or {}).get("id") or "").strip().lower()
+    return "api.routin.ai" in base_url or "routin.ai" in base_url or "routin" in name or pid == "routin"
+
+def is_otuapi_provider(provider):
+    protocol = str((provider or {}).get("protocol") or "").strip().lower()
+    base_url = str((provider or {}).get("base_url") or "").strip().lower()
+    name = str((provider or {}).get("name") or "").strip().lower()
+    pid = str((provider or {}).get("id") or "").strip().lower()
+    return protocol == "otuapi" or "otuapi.com" in base_url or "otuapi" in name or pid == "otuapi"
+
+def is_grsai_provider(provider):
+    protocol = str((provider or {}).get("protocol") or "").strip().lower()
+    base_url = str((provider or {}).get("base_url") or "").strip().lower()
+    name = str((provider or {}).get("name") or "").strip().lower()
+    pid = str((provider or {}).get("id") or "").strip().lower()
+    return protocol == "grsai" or "grsai.dakka.com.cn" in base_url or "grsaiapi.com" in base_url or "grsai" in name or pid == "grsai"
+
+def is_toapis_provider(provider):
+    protocol = str((provider or {}).get("protocol") or "").strip().lower()
+    base_url = str((provider or {}).get("base_url") or "").strip().lower()
+    name = str((provider or {}).get("name") or "").strip().lower()
+    pid = str((provider or {}).get("id") or "").strip().lower()
+    return protocol == "toapis" or "toapis.com" in base_url or "toapis" in name or pid == "toapis"
+
+def is_baofu_provider(provider):
+    protocol = str((provider or {}).get("protocol") or "").strip().lower()
+    base_url = str((provider or {}).get("base_url") or "").strip().lower()
+    name = str((provider or {}).get("name") or "").strip().lower()
+    pid = str((provider or {}).get("id") or "").strip().lower()
+    return protocol == "baofu" or "baofu" in base_url or "baofu" in name or pid == "baofu"
+
+def is_bananarouter_provider(provider):
+    protocol = str((provider or {}).get("protocol") or "").strip().lower()
+    base_url = str((provider or {}).get("base_url") or "").strip().lower()
+    name = str((provider or {}).get("name") or "").strip().lower()
+    pid = str((provider or {}).get("id") or "").strip().lower()
+    return protocol == "bananarouter" or "bananarouter.com" in base_url or "bananarouter" in name or "banana router" in name or pid == "bananarouter"
+
+def is_moonly_provider(provider):
+    protocol = str((provider or {}).get("protocol") or "").strip().lower()
+    base_url = str((provider or {}).get("base_url") or "").strip().lower()
+    name = str((provider or {}).get("name") or "").strip().lower()
+    pid = str((provider or {}).get("id") or "").strip().lower()
+    return protocol == "moonly" or "relay.moonlyai.com" in base_url or "moonly" in name or pid == "moonly"
+
+def otuapi_default_model_payload(status=200, message="OtuAPI protocol is available", raw=None):
+    return {
+        "ok": True,
+        "protocol": "otuapi",
+        "status": status,
+        "model_count": len(OTUAPI_IMAGE_MODELS),
+        "image_models": OTUAPI_IMAGE_MODELS[:],
+        "chat_models": [],
+        "video_models": [],
+        "all": OTUAPI_IMAGE_MODELS[:],
+        "message": message,
+        "raw": raw or {},
+    }
+
+def grsai_default_model_payload(status=200, message="Grsai protocol is available", raw=None):
+    return {
+        "ok": True,
+        "protocol": "grsai",
+        "status": status,
+        "model_count": len(GRSAI_IMAGE_MODELS),
+        "image_models": GRSAI_IMAGE_MODELS[:],
+        "chat_models": [],
+        "video_models": [],
+        "all": GRSAI_IMAGE_MODELS[:],
+        "message": message,
+        "raw": raw or {},
+    }
 
 def is_volcengine_provider(provider):
     return provider_protocol(provider) == "volcengine"
@@ -4626,6 +4935,8 @@ def image_task_url_for_provider(provider, task_id):
     is_apimart = is_apimart_provider(provider)
     if is_apimart:
         return f"{base_url}/tasks/{task_id}" if base_url.endswith("/v1") else f"{base_url}/v1/tasks/{task_id}"
+    if is_moonly_provider(provider):
+        return f"{base_url}/images/generations/{task_id}" if base_url.endswith("/v1") else f"{base_url}/v1/images/generations/{task_id}"
     return f"{base_url}/images/tasks/{task_id}" if base_url.endswith("/v1") else f"{base_url}/v1/images/tasks/{task_id}"
 
 def image_task_data(payload):
@@ -4692,6 +5003,14 @@ def output_path_for(filename, category="output"):
 def output_file_from_url(url):
     if isinstance(url, dict):
         url = url.get("url", "")
+    url = str(url or "").strip()
+    if url.startswith(("http://", "https://")):
+        try:
+            parsed = urllib.parse.urlparse(url)
+            if (parsed.hostname or "").lower() in {"127.0.0.1", "localhost", "::1"}:
+                url = parsed.path
+        except Exception:
+            pass
     if not url or not (url.startswith("/output/") or url.startswith("/assets/")):
         return None
     clean = urllib.parse.unquote(url.split("?", 1)[0]).replace("\\", "/")
@@ -7019,6 +7338,9 @@ async def upload_local_video_to_cloud(ref_url: str, service: str = "auto") -> Di
 async def upload_local_video_to_temp_sh(ref_url: str) -> Dict[str, str]:
     return await upload_local_video_to_cloud(ref_url, "auto")
 
+async def upload_local_media_to_cloud(ref_url: str, service: str = "auto") -> Dict[str, str]:
+    return await upload_local_video_to_cloud(ref_url, service)
+
 async def save_ai_image_to_output(image_data, prefix="online_", category="output"):
     filename = f"{prefix}{uuid.uuid4().hex[:10]}.png"
     path = output_path_for(filename, category)
@@ -7034,6 +7356,18 @@ async def save_ai_image_to_output(image_data, prefix="online_", category="output
             f.write(base64.b64decode(image_data["value"]))
         return output_url_for(filename, category)
     value = image_data["value"]
+    if isinstance(value, str) and value.startswith("data:image/") and ";base64," in value:
+        header, encoded = value.split(";base64,", 1)
+        mime_type = header.replace("data:", "", 1).lower()
+        if "jpeg" in mime_type or "jpg" in mime_type:
+            filename = filename[:-4] + ".jpg"
+            path = output_path_for(filename, category)
+        elif "webp" in mime_type:
+            filename = filename[:-4] + ".webp"
+            path = output_path_for(filename, category)
+        with open(path, "wb") as f:
+            f.write(base64.b64decode(encoded))
+        return output_url_for(filename, category)
     if value.startswith("/output/") or value.startswith("/assets/"):
         return value
     try:
@@ -7054,37 +7388,6 @@ async def save_ai_image_to_output(image_data, prefix="online_", category="output
     except Exception as e:
         print(f"保存上游图片失败: {e}")
         return value
-
-def image_output_meta(url, source_item=None):
-    meta = {"url": url, "kind": "image"}
-    if not url:
-        return meta
-    parsed_name = os.path.basename(urllib.parse.urlparse(str(url)).path)
-    if parsed_name:
-        meta["name"] = parsed_name
-    if isinstance(source_item, dict):
-        for key in ("natural_w", "natural_h", "width", "height", "w", "h", "layout_w", "layout_h"):
-            try:
-                value = int(float(source_item.get(key) or 0))
-            except (TypeError, ValueError):
-                value = 0
-            if value > 0:
-                meta[key] = value
-    path = output_file_from_url(url)
-    if path and os.path.exists(path):
-        try:
-            with Image.open(path) as img:
-                width, height = img.size
-            if width > 0 and height > 0:
-                meta.update({
-                    "natural_w": width,
-                    "natural_h": height,
-                    "width": width,
-                    "height": height,
-                })
-        except Exception:
-            pass
-    return meta
 
 async def save_remote_video_to_output(url, prefix="video_", category="output"):
     if not url:
@@ -7334,6 +7637,24 @@ def normalize_volcengine_size(size, model=""):
 def friendly_image_error_detail(text, size="", model=""):
     text = str(text or "")
     lower_text = text.lower()
+    payload = parse_error_payload_text(text)
+    error = payload.get("error") if isinstance(payload.get("error"), dict) else {}
+    error_code = str(error.get("code") or payload.get("code") or "").strip().lower()
+    error_type = str(error.get("type") or payload.get("type") or "").strip().lower()
+    error_message = str(error.get("message") or payload.get("message") or "").strip()
+    error_message_lc = error_message.lower()
+    if (
+        "insufficient_user_quota" in error_code
+        or "insufficient_quota" in error_code
+        or "quota" in error_code
+        or "预扣费额度失败" in text
+        or "余额不足" in text
+        or "剩余额度" in text
+        or "额度不足" in text
+        or "insufficient quota" in lower_text
+        or "insufficient balance" in lower_text
+    ):
+        return error_message or "上游账户余额或额度不足，无法完成本次生图请求。请充值后重试，或降低分辨率/质量档位。"
     if is_gpt_image_2_model(model) and gpt_image_2_size_exceeds_supported(size):
         return gpt_image_2_size_error_message(size)
     mentions_size = any(token in lower_text for token in ["size", "resolution", "dimension"])
@@ -7363,7 +7684,7 @@ def friendly_image_error_detail(text, size="", model=""):
         return "上游内容安全拦截了这段提示词，原因偏向版权/敏感内容限制。请改写提示词，避免直接出现具体 IP、角色名、品牌名、影视/动漫作品名，改成风格特征描述再试。"
     if "rejected by the safety system" in lower_text or "image_generation_user_error" in lower_text or "safety system" in lower_text or "content_policy_violation" in lower_text or "content policy" in lower_text:
         return "上游（Azure/OpenAI 系）内容安全系统拒绝了本次生图请求。可能是提示词或参考图触发了内容审核。请改写提示词、避免敏感/暴力/成人/名人/版权角色等描述；若使用了人物参考图，可换一张图再试。这是上游平台的审核策略，并非本系统报错。"
-    if "rate limit" in lower_text or "429" in lower_text:
+    if "rate_limit" in error_code or "rate_limit" in error_type or "rate limit" in lower_text or "too many requests" in lower_text:
         return "请求过于频繁，已被上游限流，请稍后再试。"
     if "unauthorized" in lower_text or "401" in lower_text:
         return "API Key 无效或已过期，请到「API 设置」检查 Key。"
@@ -7506,22 +7827,631 @@ def gemini_reference_part(ref):
         return {"fileData": {"mimeType": "image/png", "fileUri": value}}
     return None
 
+def otuapi_base_url(provider):
+    base_url = str((provider or {}).get("base_url") or "https://otuapi.com").strip().rstrip("/")
+    return base_url or "https://otuapi.com"
+
+def is_otuapi_async_image_model(model):
+    normalized = str(model or "").strip().lower().replace("_", "-")
+    return normalized.startswith("nano-banana") or normalized.startswith("gpt-image-2")
+
+def otuapi_resolution_from_size(size):
+    width, height = parse_size_pair(size)
+    raw = str(size or "").strip().upper()
+    if raw in {"1K", "2K", "4K"}:
+        return raw
+    if width and height:
+        long_edge = max(width, height)
+        pixels = width * height
+        if long_edge >= 3000 or pixels > 4_500_000:
+            return "4K"
+        if long_edge >= 1800 or pixels > 1_800_000:
+            return "2K"
+    return "1K"
+
+def otuapi_aspect_ratio(size):
+    aspect, _resolution = apimart_size_resolution(size)
+    return aspect if re.fullmatch(r"(auto|\d+\s*:\s*\d+)", aspect or "") else "1:1"
+
+def otuapi_model_for_size(model, size):
+    model = str(model or "").strip()
+    normalized = model.lower().replace("_", "-")
+    resolution = otuapi_resolution_from_size(size)
+    if normalized.startswith("nano-banana-pro"):
+        return f"nano_banana_pro-{resolution}"
+    if normalized in {"gpt-image-2", "gpt-image-2-2k", "gpt-image-2-4k"} and resolution in {"2K", "4K"}:
+        return f"gpt-image-2-{resolution}"
+    return model
+
+def otuapi_reference_url(ref):
+    return reference_to_data_url(ref, max_size=1536)
+
+TOAPIS_4K_ASPECTS = {"16:9", "9:16", "2:1", "1:2", "21:9", "9:21"}
+
+def toapis_base_url(provider):
+    base_url = str((provider or {}).get("base_url") or "https://toapis.com").strip().rstrip("/")
+    return base_url or "https://toapis.com"
+
+def toapis_resolution_from_size(size):
+    width, height = parse_size_pair(size)
+    raw = str(size or "").strip().upper()
+    if raw in {"1K", "2K", "4K"}:
+        return raw
+    if width and height:
+        long_edge = max(width, height)
+        pixels = width * height
+        if long_edge >= 3000 or pixels > 4_500_000:
+            return "4K"
+        if long_edge >= 1800 or pixels > 1_800_000:
+            return "2K"
+    return "1K"
+
+def toapis_aspect_ratio(size):
+    aspect, _resolution = apimart_size_resolution(size)
+    aspect = (aspect or "1:1").replace(" ", "")
+    if toapis_resolution_from_size(size) == "4K" and aspect not in TOAPIS_4K_ASPECTS:
+        return "16:9"
+    return aspect if re.fullmatch(r"(auto|\d+\s*:\s*\d+)", aspect or "") else "1:1"
+
+def toapis_model_for_request(model):
+    name = str(model or "").strip()
+    normalized = name.lower().replace("_", "-")
+    if normalized == "gpt-image-2-high":
+        return name
+    if normalized in {"gpt-image-2-4k", "gpt-image-2-2k"}:
+        return "gpt-image-2"
+    return name or "gpt-image-2"
+
+BAOFU_IMAGE_MODELS = ["gpt-image-2"]
+BANANAROUTER_IMAGE_MODELS = ["gpt-image-2"]
+BAOFU_FOUR_K_SIZES = {
+    "1:1": "4096x4096",
+    "2:3": "3120x4680",
+    "3:2": "4530x3020",
+    "3:4": "3861x5148",
+    "4:3": "4960x3720",
+    "9:16": "3096x5504",
+    "16:9": "5488x3087",
+    "21:9": "6006x2574",
+    "9:21": "2574x6006",
+}
+BAOFU_FOUR_K_DEFAULT_SIZE = BAOFU_FOUR_K_SIZES["16:9"]
+
+def baofu_default_model_payload(status=200, message="Baofu protocol is available", raw=None):
+    return {
+        "ok": True,
+        "protocol": "baofu",
+        "status": status,
+        "model_count": len(BAOFU_IMAGE_MODELS),
+        "image_models": BAOFU_IMAGE_MODELS[:],
+        "chat_models": [],
+        "video_models": [],
+        "all": BAOFU_IMAGE_MODELS[:],
+        "raw": raw or {"models_endpoint_model": "gpt-image-2"},
+    }
+
+
+def baofu_model_for_request(model):
+    name = str(model or "").strip()
+    normalized = name.lower().replace("_", "-")
+    if normalized in {"gpt-image-2-4k", "gpt-image-2-2k", "gpt-image-2-high"}:
+        return "gpt-image-2"
+    return name or "gpt-image-2"
+
+def baofu_four_k_size_for_dimensions(width, height):
+    if not width or not height:
+        return BAOFU_FOUR_K_DEFAULT_SIZE
+    request_ratio = width / height
+    best_key = "16:9"
+    best_score = float("inf")
+    for ratio_key in BAOFU_FOUR_K_SIZES:
+        ratio_width, ratio_height = ratio_key.split(":", 1)
+        target_ratio = int(ratio_width) / int(ratio_height)
+        score = abs(math.log(request_ratio / target_ratio))
+        if score < best_score:
+            best_key = ratio_key
+            best_score = score
+    return BAOFU_FOUR_K_SIZES[best_key]
+
+def baofu_size_for_request(size):
+    raw = str(size or "").strip()
+    if raw.lower().startswith("baofu-exact:"):
+        exact_size = raw.split(":", 1)[1].strip()
+        width, height = parse_size_pair(exact_size)
+        if width and height:
+            return exact_size
+    width, height = parse_size_pair(size)
+    if width and height:
+        if max(width, height) >= 3000:
+            return baofu_four_k_size_for_dimensions(width, height)
+        return f"{width}x{height}"
+    raw = raw.lower()
+    if raw == "4k":
+        return BAOFU_FOUR_K_DEFAULT_SIZE
+    if raw == "2k":
+        return "2048x2048"
+    if raw == "1k":
+        return "1024x1024"
+    return size or "1024x1024"
+
+async def generate_baofu_provider_image(prompt, size, model, reference_images=None, provider=None):
+    model_name = baofu_model_for_request(model)
+    request_size = baofu_size_for_request(size)
+    gen_url = provider_endpoint_url(provider, "image_generation_endpoint", "/v1/images/generations")
+    refs = [ref for ref in (reference_images or []) if ref.get("url")]
+    request_timeout = httpx.Timeout(connect=20.0, read=1800.0, write=120.0, pool=20.0)
+    async with httpx.AsyncClient(timeout=request_timeout) as client:
+        body = {"model": model_name, "prompt": prompt, "size": request_size, "response_format": "url", "n": 1}
+        if refs:
+            body["image_urls"] = [reference_to_data_url(ref, max_size=1536) for ref in refs[:4]]
+        response = await client.post(gen_url, headers=api_headers(provider=provider, model=model_name), json=body)
+        response.raise_for_status()
+        raw = response.json()
+        return extract_image(raw), raw
+
+def bananarouter_model_for_request(model):
+    name = str(model or "").strip()
+    normalized = name.lower().replace("_", "-")
+    if normalized in {"gpt-image-2-4k", "gpt-image-2-2k", "gpt-image-2-high"}:
+        return "gpt-image-2"
+    return name or "gpt-image-2"
+
+async def generate_bananarouter_provider_image(prompt, size, model, reference_images=None, provider=None, quality=""):
+    model_name = bananarouter_model_for_request(model)
+    request_size = normalize_gpt_image_2_size(size)
+    gen_url = provider_endpoint_url(provider, "image_generation_endpoint", "/v1/images/generations")
+    edit_url = provider_endpoint_url(provider, "image_edit_endpoint", "/v1/images/edits")
+    refs = [ref for ref in (reference_images or []) if ref.get("url")]
+    quality = str(quality or "").strip().lower()
+    if quality not in {"low", "medium", "high"}:
+        quality = ""
+    request_timeout = httpx.Timeout(connect=20.0, read=1800.0, write=180.0, pool=20.0)
+    async with httpx.AsyncClient(timeout=request_timeout, follow_redirects=True) as client:
+        body = {"model": model_name, "prompt": prompt, "size": request_size, "response_format": "url", "n": 1}
+        if quality:
+            body["quality"] = quality
+        if refs:
+            body["images"] = [reference_to_data_url(ref, max_size=1536) for ref in refs[:4]]
+        target_url = edit_url if refs else gen_url
+        response = await client.post(target_url, headers=api_headers(provider=provider, model=model_name), json=body)
+        response.raise_for_status()
+        raw = response.json()
+        try:
+            return extract_image(raw), raw
+        except HTTPException:
+            task_id = extract_task_id(raw)
+            if not task_id:
+                raise
+        task_result = await wait_for_image_task(client, task_id, provider)
+        return extract_image(task_result), task_result
+
+MOONLY_BASE_RATIOS = {"auto", "1:1", "3:2", "2:3", "4:3", "3:4", "5:4", "4:5", "16:9", "9:16", "2:1", "1:2", "21:9", "9:21"}
+MOONLY_BASE_4K_RATIOS = {"16:9", "9:16", "2:1", "1:2", "21:9", "9:21"}
+MOONLY_SP_RATIOS = {"auto", "1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16", "21:9", "9:21", "1:3", "3:1", "2:1", "1:2"}
+MOONLY_FAST_VIP_ALLOWED = {
+    "1K": {"1:1", "2:3", "3:2"},
+    "2K": {"16:9"},
+    "4K": {"16:9", "9:16"},
+}
+
+def moonly_base_url(provider):
+    base_url = str((provider or {}).get("base_url") or "https://relay.moonlyai.com").strip().rstrip("/")
+    return base_url or "https://relay.moonlyai.com"
+
+async def moonly_reference_url(ref):
+    ref_url = str((ref or {}).get("url") or "").strip()
+    if not ref_url:
+        return ""
+    if ref_url.startswith(("http://", "https://")):
+        return ref_url
+    public_url = local_asset_public_url(ref_url)
+    if public_url:
+        return public_url
+    uploaded = await upload_local_media_to_cloud(ref_url, "auto")
+    return str(uploaded.get("url") or "").strip()
+
+def moonly_ratio_value(aspect):
+    if not isinstance(aspect, str) or ":" not in aspect:
+        return 1.0
+    a, b = aspect.split(":", 1)
+    try:
+        return float(a) / float(b)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return 1.0
+
+def moonly_closest_ratio(aspect, candidates):
+    candidates = [item for item in candidates if item != "auto"]
+    if aspect in candidates:
+        return aspect
+    ratio = moonly_ratio_value(aspect)
+    is_landscape = ratio > 1.0
+    is_portrait = ratio < 1.0
+    oriented = [item for item in candidates if (moonly_ratio_value(item) > 1.0) == is_landscape and (moonly_ratio_value(item) < 1.0) == is_portrait]
+    pool = oriented or candidates or ["1:1"]
+    return min(pool, key=lambda item: abs(moonly_ratio_value(item) - ratio))
+
+def moonly_aspect_ratio(size):
+    width, height = parse_size_pair(size)
+    raw = str(size or "").strip()
+    normalized_raw = raw.replace(" ", "")
+    if normalized_raw.lower() == "auto":
+        return "auto"
+    if re.fullmatch(r"\d+\s*:\s*\d+", raw):
+        return normalized_raw
+    if not width or not height:
+        return "1:1"
+    ratio = width / height
+    candidates = ["1:1", "3:2", "2:3", "4:3", "3:4", "5:4", "4:5", "16:9", "9:16", "2:1", "1:2", "3:1", "1:3", "21:9", "9:21"]
+    return min(candidates, key=lambda item: abs(moonly_ratio_value(item) - ratio))
+
+def moonly_resolution_from_size(size):
+    width, height = parse_size_pair(size)
+    raw = str(size or "").strip().upper()
+    if raw in {"1K", "2K", "4K"}:
+        return raw
+    if not width or not height:
+        return "1K"
+    long_edge = max(width, height)
+    pixels = width * height
+    if long_edge >= 3000 or pixels > 4_500_000:
+        return "4K"
+    if long_edge >= 1800 or pixels > 1_800_000:
+        return "2K"
+    return "1K"
+
+def moonly_model_group(model):
+    normalized = str(model or "").strip().lower()
+    if normalized == "gpt-image-2-sp":
+        return "sp"
+    if normalized == "gpt-image-2-official":
+        return "official"
+    if normalized == "gpt-image-2-vip":
+        return "vip"
+    if normalized == "gpt-image-2-fast":
+        return "fast_vip"
+    return "base"
+
+MOONLY_VIP_ALLOWED_COMBOS = {
+    ("1K", "1:1"),
+    ("2K", "1:1"),
+    ("1K", "3:2"),
+    ("1K", "2:3"),
+    ("2K", "16:9"),
+    ("4K", "16:9"),
+    ("4K", "9:16"),
+}
+
+def moonly_allowed_ratios_for(model, resolution):
+    resolution = str(resolution or "1K").strip().upper()
+    group = moonly_model_group(model)
+    if group == "sp":
+        return MOONLY_SP_RATIOS if resolution == "1K" else set()
+    if group == "official":
+        return MOONLY_BASE_4K_RATIOS if resolution == "4K" else MOONLY_BASE_RATIOS
+    if group == "vip":
+        return {aspect for res, aspect in MOONLY_VIP_ALLOWED_COMBOS if res == resolution}
+    if group == "fast_vip":
+        return MOONLY_FAST_VIP_ALLOWED.get(resolution) or set()
+    return MOONLY_BASE_4K_RATIOS if resolution == "4K" else MOONLY_BASE_RATIOS
+
+def moonly_allowed_combos_for(model):
+    combos = []
+    for resolution in ("1K", "2K", "4K"):
+        for aspect in sorted(moonly_allowed_ratios_for(model, resolution), key=lambda item: (moonly_ratio_value(item), item)):
+            combos.append((resolution, aspect))
+    return combos
+
+def moonly_validate_size_resolution(aspect, resolution, model):
+    aspect = str(aspect or "").strip()
+    resolution = str(resolution or "1K").strip().upper()
+    return aspect in moonly_allowed_ratios_for(model, resolution)
+
+def moonly_request_size_resolution(size, model):
+    aspect = moonly_aspect_ratio(size)
+    resolution = moonly_resolution_from_size(size)
+    if not moonly_validate_size_resolution(aspect, resolution, model):
+        model_name = str(model or "gpt-image-2").strip() or "gpt-image-2"
+        allowed = ", ".join(f"{res}|{ratio}" for res, ratio in moonly_allowed_combos_for(model_name))
+        raise HTTPException(
+            status_code=400,
+            detail=f"MoonlyAI {model_name} 不支持 {resolution}|{aspect}。可用组合：{allowed}",
+        )
+    return aspect, resolution
+
+async def wait_for_moonly_image_task(client, provider, task_id):
+    task_url = f"{moonly_base_url(provider)}/v1/images/generations/{task_id}"
+    deadline = time.monotonic() + IMAGE_TASK_TIMEOUT
+    last_payload = {}
+    while time.monotonic() < deadline:
+        response = await client.get(task_url, headers=api_headers(provider=provider))
+        response.raise_for_status()
+        last_payload = response.json()
+        status = str(image_task_data(last_payload).get("status") or last_payload.get("status") or "").upper()
+        if not status:
+            try:
+                if extract_image(last_payload):
+                    return last_payload
+            except HTTPException:
+                pass
+        if status in IMAGE_TASK_SUCCESS_STATUSES:
+            return last_payload
+        if status in IMAGE_TASK_FAILED_STATUSES:
+            raise HTTPException(status_code=502, detail=f"MoonlyAI image task failed: {image_task_fail_reason(last_payload)}")
+        await asyncio.sleep(min(IMAGE_POLL_INTERVAL, max(0.0, deadline - time.monotonic())))
+    raise HTTPException(status_code=504, detail=f"MoonlyAI image task timed out, task_id={task_id}, last={last_payload}")
+
+async def generate_moonly_provider_image(prompt, size, model, reference_images=None, provider=None, quality=""):
+    model_name = str(model or "").strip() or "gpt-image-2"
+    aspect, resolution = moonly_request_size_resolution(size, model_name)
+    refs = []
+    for ref in (reference_images or [])[:14]:
+        url = await moonly_reference_url(ref)
+        if url:
+            refs.append(url)
+    body = {"model": model_name, "prompt": prompt, "size": aspect, "resolution": resolution}
+    if refs:
+        body["image_urls"] = refs
+    quality_value = str(quality or "").strip().lower()
+    if quality_value in {"low", "medium", "high"}:
+        body["quality"] = quality_value
+    timeout = httpx.Timeout(connect=20.0, read=1800.0, write=120.0, pool=20.0)
+    async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+        response = await client.post(f"{moonly_base_url(provider)}/v1/images/generations", headers=api_headers(provider=provider), json=body)
+        response.raise_for_status()
+        raw = response.json()
+        try:
+            return extract_image(raw), raw
+        except HTTPException:
+            task_id = extract_task_id(raw)
+            if not task_id:
+                raise HTTPException(status_code=502, detail=f"MoonlyAI did not return a task id or image result: {raw}")
+        result = await wait_for_moonly_image_task(client, provider, task_id)
+        return extract_image(result), result
+
+async def wait_for_toapis_image_task(client, provider, task_id):
+    task_url = f"{toapis_base_url(provider)}/v1/images/generations/{task_id}"
+    timeout = max(IMAGE_TASK_TIMEOUT, 900)
+    deadline = time.monotonic() + timeout
+    last_payload = {}
+    while time.monotonic() < deadline:
+        response = await client.get(task_url, headers=api_headers(provider=provider))
+        response.raise_for_status()
+        last_payload = response.json()
+        task_data = last_payload.get("result") if isinstance(last_payload.get("result"), dict) else last_payload
+        status = str(task_data.get("status") or last_payload.get("status") or "").lower()
+        if status in {"completed", "complete", "done", "finished", "ok", "ready"}:
+            return last_payload
+        if status in {"failed", "fail", "error", "errored", "canceled", "cancelled", "timeout", "rejected", "expired"}:
+            error = last_payload.get("error") if isinstance(last_payload.get("error"), dict) else {}
+            reason = error.get("message") or task_data.get("message") or last_payload.get("message") or "ToAPIs image task failed"
+            raise HTTPException(status_code=502, detail=f"ToAPIs image task failed: {reason}")
+        await asyncio.sleep(min(3.0, max(0.0, deadline - time.monotonic())))
+    raise HTTPException(status_code=504, detail=f"ToAPIs image task timed out after {int(timeout)} seconds, task_id={task_id}")
+
+async def generate_toapis_provider_image(prompt, size, model, reference_images=None, provider=None):
+    base_url = toapis_base_url(provider)
+    model_name = toapis_model_for_request(model)
+    resolution = toapis_resolution_from_size(size)
+    aspect_ratio = toapis_aspect_ratio(size)
+    refs = [otuapi_reference_url(ref) for ref in (reference_images or [])[:14]]
+    refs = [value for value in refs if value]
+    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=20.0, read=1800.0, write=120.0, pool=20.0), follow_redirects=True) as client:
+        body = {
+            "model": model_name,
+            "prompt": prompt.strip(),
+            "size": aspect_ratio,
+            "resolution": resolution,
+            "n": 1,
+            "response_format": "url",
+        }
+        if refs:
+            body["image_urls"] = refs
+        response = await client.post(f"{base_url}/v1/images/generations", headers=api_headers(provider=provider), json=body)
+        response.raise_for_status()
+        raw = response.json()
+        try:
+            return extract_image(raw), raw
+        except HTTPException:
+            task_id = extract_task_id(raw)
+            if not task_id:
+                raise HTTPException(status_code=502, detail=f"ToAPIs did not return a task id or image result: {raw}")
+        result = await wait_for_toapis_image_task(client, provider, task_id)
+        return extract_image(result), result
+
+async def wait_for_otuapi_image_task(client, provider, task_id):
+    task_url = f"{otuapi_base_url(provider)}/v1/videos/{task_id}"
+    timeout = max(IMAGE_TASK_TIMEOUT, 900)
+    deadline = time.monotonic() + timeout
+    last_payload = {}
+    while time.monotonic() < deadline:
+        response = await client.get(task_url, headers=api_headers(provider=provider))
+        response.raise_for_status()
+        last_payload = response.json()
+        task_data = last_payload.get("data") if isinstance(last_payload.get("data"), dict) else last_payload
+        status = str(task_data.get("status") or task_data.get("task_status") or "").lower()
+        if status in {"success", "succeed", "succeeded", "completed", "complete", "done", "finished", "ok", "ready"}:
+            return last_payload
+        if status in {"failure", "failed", "fail", "error", "errored", "canceled", "cancelled", "timeout", "rejected", "expired"}:
+            error = task_data.get("error") if isinstance(task_data.get("error"), dict) else {}
+            reason = task_data.get("fail_reason") or task_data.get("message") or error.get("message") or last_payload.get("message") or "OtuAPI image task failed"
+            raise HTTPException(status_code=502, detail=f"OtuAPI image task failed: {reason}")
+        await asyncio.sleep(min(3.0, max(0.0, deadline - time.monotonic())))
+    raise HTTPException(status_code=504, detail=f"OtuAPI image task timed out after {int(timeout)} seconds, task_id={task_id}")
+
+async def generate_otuapi_provider_image(prompt, size, model, reference_images=None, provider=None):
+    model_name = otuapi_model_for_size(model, size)
+    base_url = otuapi_base_url(provider)
+    refs = [otuapi_reference_url(ref) for ref in (reference_images or [])[:14]]
+    refs = [value for value in refs if value]
+    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=20.0, read=1800.0, write=120.0, pool=20.0), follow_redirects=True) as client:
+        if is_otuapi_async_image_model(model_name):
+            body = {
+                "model": model_name,
+                "prompt": prompt.strip(),
+                "metadata": {"aspect_ratio": otuapi_aspect_ratio(size), "urls": refs},
+            }
+            response = await client.post(f"{base_url}/v1/videos", headers=api_headers(provider=provider), json=body)
+            response.raise_for_status()
+            raw = response.json()
+            try:
+                return extract_image(raw), raw
+            except HTTPException:
+                task_id = extract_task_id(raw)
+                if not task_id:
+                    raise HTTPException(status_code=502, detail=f"OtuAPI did not return a task id or image result: {raw}")
+            result = await wait_for_otuapi_image_task(client, provider, task_id)
+            return extract_image(result), result
+        body = {"model": model_name, "prompt": prompt.strip(), "size": normalize_gpt_image_2_size(size)}
+        if refs:
+            body["image"] = refs
+        response = await client.post(f"{base_url}/v1/images/generations", headers=api_headers(provider=provider), json=body)
+        response.raise_for_status()
+        raw = response.json()
+        return extract_image(raw), raw
+
+def grsai_base_url(provider):
+    base_url = str((provider or {}).get("base_url") or "https://grsai.dakka.com.cn").strip().rstrip("/")
+    return base_url or "https://grsai.dakka.com.cn"
+
+def grsai_resolution_from_size(size):
+    return otuapi_resolution_from_size(size)
+
+def grsai_aspect_ratio(size):
+    return otuapi_aspect_ratio(size)
+
+def grsai_gpt_size(size):
+    width, height = parse_size_pair(size)
+    if width and height:
+        return normalize_gpt_image_2_size(size)
+    aspect, resolution = apimart_size_resolution(size)
+    presets = {
+        ("1:1", "1k"): "1024x1024", ("1:1", "2k"): "2048x2048", ("1:1", "4k"): "2880x2880",
+        ("16:9", "1k"): "1280x720", ("16:9", "2k"): "2048x1152", ("16:9", "4k"): "3840x2160",
+        ("9:16", "1k"): "720x1280", ("9:16", "2k"): "1152x2048", ("9:16", "4k"): "2160x3840",
+        ("4:3", "1k"): "1152x864", ("4:3", "2k"): "2304x1728", ("4:3", "4k"): "3264x2448",
+        ("3:4", "1k"): "864x1152", ("3:4", "2k"): "1728x2304", ("3:4", "4k"): "2448x3264",
+        ("3:2", "1k"): "1536x1024", ("3:2", "2k"): "2048x1360", ("3:2", "4k"): "3504x2336",
+        ("2:3", "1k"): "1024x1536", ("2:3", "2k"): "1360x2048", ("2:3", "4k"): "2336x3504",
+        ("5:4", "1k"): "1120x896", ("5:4", "2k"): "2240x1792", ("5:4", "4k"): "3200x2560",
+        ("4:5", "1k"): "896x1120", ("4:5", "2k"): "1792x2240", ("4:5", "4k"): "2560x3200",
+        ("21:9", "1k"): "1456x624", ("21:9", "2k"): "2912x1248", ("21:9", "4k"): "3840x1648",
+        ("9:21", "1k"): "624x1456", ("9:21", "2k"): "1248x2912", ("9:21", "4k"): "1648x3840",
+        ("1:2", "1k"): "768x1536", ("1:2", "2k"): "1536x3072", ("1:2", "4k"): "1920x3840",
+        ("2:1", "1k"): "1536x768", ("2:1", "2k"): "3072x1536", ("2:1", "4k"): "3840x1920",
+    }
+    return presets.get((aspect, resolution), "3840x2160" if resolution == "4k" else "2048x2048" if resolution == "2k" else "1024x1024")
+
+def grsai_model_for_size(model, size):
+    return str(model or "").strip() or "nano-banana-pro"
+
+def grsai_result_image(raw):
+    if not isinstance(raw, dict):
+        raise HTTPException(status_code=502, detail="Grsai returned a non-JSON response")
+    results = raw.get("results") or raw.get("result") or raw.get("data")
+    if isinstance(results, dict):
+        results = [results]
+    if isinstance(results, list):
+        for item in results:
+            if isinstance(item, str) and item.startswith(("http://", "https://")):
+                return {"type": "url", "value": item}
+            if isinstance(item, dict):
+                url = item.get("url") or item.get("image_url") or item.get("imageUrl")
+                if isinstance(url, list) and url:
+                    url = url[0]
+                if isinstance(url, str) and url:
+                    return {"type": "url", "value": url}
+    return extract_image(raw)
+
+def grsai_task_id(raw):
+    if not isinstance(raw, dict):
+        return ""
+    for key in ("id", "task_id", "taskId"):
+        value = raw.get(key)
+        if value:
+            return str(value)
+    nested = raw.get("data")
+    if isinstance(nested, dict):
+        return grsai_task_id(nested)
+    return ""
+
+async def wait_for_grsai_image_task(client, provider, task_id):
+    result_url = f"{grsai_base_url(provider)}/v1/api/result"
+    deadline = time.monotonic() + max(IMAGE_TASK_TIMEOUT, 900)
+    last_payload = {}
+    while time.monotonic() < deadline:
+        response = await client.get(result_url, headers=api_headers(provider=provider), params={"id": task_id})
+        response.raise_for_status()
+        last_payload = response.json()
+        status = str(last_payload.get("status") or "").lower()
+        if status in {"succeeded", "success", "completed", "complete", "done", "finished", "ok"}:
+            return last_payload
+        if status in {"failed", "failure", "fail", "error", "violation", "rejected", "canceled", "cancelled"}:
+            raise HTTPException(status_code=502, detail=f"Grsai image task failed: {last_payload.get('error') or last_payload}")
+        await asyncio.sleep(min(3.0, max(0.0, deadline - time.monotonic())))
+    raise HTTPException(status_code=504, detail=f"Grsai image task timed out, task_id={task_id}, last={last_payload}")
+
+async def generate_grsai_provider_image(prompt, size, model, reference_images=None, provider=None):
+    model_name = grsai_model_for_size(model, size)
+    refs = [reference_to_data_url(ref, max_size=1536) for ref in (reference_images or [])[:14]]
+    refs = [value for value in refs if value]
+    is_gpt = model_name.startswith("gpt-image-2")
+    body = {
+        "model": model_name,
+        "prompt": prompt.strip(),
+        "images": refs,
+        "replyType": "async",
+    }
+    if is_gpt:
+        body["aspectRatio"] = grsai_gpt_size(size)
+    else:
+        body["aspectRatio"] = grsai_aspect_ratio(size)
+        body["imageSize"] = grsai_resolution_from_size(size)
+    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=20.0, read=1800.0, write=120.0, pool=20.0), follow_redirects=True) as client:
+        response = await client.post(f"{grsai_base_url(provider)}/v1/api/generate", headers=api_headers(provider=provider), json=body)
+        response.raise_for_status()
+        raw = response.json()
+        try:
+            return grsai_result_image(raw), raw
+        except HTTPException:
+            task_id = grsai_task_id(raw)
+            if not task_id:
+                raise HTTPException(status_code=502, detail=f"Grsai did not return a task id or image result: {raw}")
+        result = await wait_for_grsai_image_task(client, provider, task_id)
+        return grsai_result_image(result), result
+
 async def generate_gemini_provider_image(prompt, size, model, reference_images=None, provider=None):
     model_name = gemini_model_name(model)
     endpoint = gemini_endpoint_url(provider, model_name)
     parts = [{"text": prompt.strip()}]
-    for ref in (reference_images or [])[:ONLINE_IMAGE_REFERENCE_MAX]:
+    for ref in (reference_images or [])[:16]:
         part = gemini_reference_part(ref)
         if part:
             parts.append(part)
-    body = {
-        "contents": [{"role": "user", "parts": parts}],
-        "generationConfig": {
-            "responseModalities": ["TEXT", "IMAGE"],
-            "imageConfig": gemini_image_config(size),
-        },
-    }
-    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=20.0, read=1800.0, write=120.0, pool=20.0)) as client:
+    if is_linapi_provider(provider):
+        body = {
+            "contents": [{"parts": parts}],
+            "generationConfig": {"imageConfig": gemini_image_config(size)},
+        }
+    elif is_routin_provider(provider):
+        body = {
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": {
+                "responseModalities": ["IMAGE"],
+                "imageConfig": gemini_image_config(size),
+            },
+        }
+    else:
+        body = {
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": {
+                "responseModalities": ["TEXT", "IMAGE"],
+                "imageConfig": gemini_image_config(size),
+            },
+        }
+    client_kwargs = {"timeout": httpx.Timeout(connect=20.0, read=1800.0, write=120.0, pool=20.0)}
+    if is_linapi_provider(provider):
+        client_kwargs["trust_env"] = False
+    async with httpx.AsyncClient(**client_kwargs) as client:
         response = await client.post(endpoint, headers=api_headers(provider=provider), json=body)
         response.raise_for_status()
         raw = response.json()
@@ -8383,7 +9313,7 @@ async def runninghub_upload_local_to_filename(client, provider, url, use_wallet=
         return raw["data"]["fileName"]
     raise HTTPException(status_code=502, detail=(raw.get("msg") if isinstance(raw, dict) else "") or f"RunningHub 上传素材失败：{raw}")
 
-async def generate_runninghub_entry_image(prompt, size, model, reference_images, provider, entry):
+async def generate_runninghub_entry_image(prompt, model, reference_images, provider, entry):
     """运行 RunningHub 工作流 / AI 应用（与智能画布一致的运行方式），返回首张图片结果。"""
     kind = entry["kind"]
     entry_id = entry["id"]
@@ -8391,24 +9321,6 @@ async def generate_runninghub_entry_image(prompt, size, model, reference_images,
     idx_map = rh_field_indexes(fields)
     use_wallet = False
     timeout = httpx.Timeout(connect=20.0, read=1800.0, write=240.0, pool=20.0)
-    aspect = runninghub_aspect_from_size(size, "")
-    resolution = runninghub_resolution_from_size(size, "")
-    width, height = parse_size_pair(size)
-    def requested_size_field_value(field):
-        names = {
-            str(field.get("fieldName") or "").strip().lower(),
-            str(field.get("fieldKey") or "").strip().lower(),
-            str(field.get("label") or "").strip().lower(),
-        }
-        if aspect and names & {"aspectratio", "aspect_ratio", "ratio"}:
-            return runninghub_schema_value(field, aspect)
-        if resolution and "resolution" in names:
-            return runninghub_schema_value(field, resolution)
-        if width and "width" in names:
-            return width
-        if height and "height" in names:
-            return height
-        return None
     async with httpx.AsyncClient(timeout=timeout) as client:
         uploaded = []
         for ref in (reference_images or [])[:ONLINE_IMAGE_REFERENCE_MAX]:
@@ -8447,10 +9359,7 @@ async def generate_runninghub_entry_image(prompt, size, model, reference_images,
             elif kind_f == "number" and field.get("random_enabled") is True:
                 node_info_list.append({"nodeId": node_id, "fieldName": field_name, "fieldValue": rh_random_field_value(field)})
             else:
-                value = requested_size_field_value(field)
-                if value is None:
-                    value = rh_default_value(field)
-                node_info_list.append({"nodeId": node_id, "fieldName": field_name, "fieldValue": value})
+                node_info_list.append({"nodeId": node_id, "fieldName": field_name, "fieldValue": rh_default_value(field)})
 
         api_key = runninghub_api_key(provider, use_wallet=use_wallet)
         if kind == "workflow":
@@ -8493,7 +9402,7 @@ async def generate_runninghub_entry_image(prompt, size, model, reference_images,
 async def generate_runninghub_provider_image(prompt, size, model, reference_images=None, provider=None):
     entry = runninghub_entry_config_from_model(provider, model)
     if entry:
-        return await generate_runninghub_entry_image(prompt, size, model, reference_images, provider, entry)
+        return await generate_runninghub_entry_image(prompt, model, reference_images, provider, entry)
     model_def = await runninghub_model_definition(provider, model)
     endpoint = runninghub_task_endpoint(provider, model_def.get("endpoint") or model)
     params = model_def.get("params") if isinstance(model_def.get("params"), list) else []
@@ -8633,14 +9542,28 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
         return await generate_jimeng_provider_image(prompt, size, model, reference_images, provider)
     if is_runninghub_provider(provider):
         return await generate_runninghub_provider_image(prompt, size, model, reference_images, provider)
+    if is_linapi_provider(provider):
+        if is_linapi_gemini_image_model(model):
+            return await generate_gemini_provider_image(prompt, size, model, reference_images, provider)
+        return await generate_linapi_provider_image(prompt, size, model, reference_images, provider, quality=quality)
     if effective_protocol(provider, model) == "gemini":
         return await generate_gemini_provider_image(prompt, size, model, reference_images, provider)
+    if is_otuapi_provider(provider):
+        return await generate_otuapi_provider_image(prompt, size, model, reference_images, provider)
+    if is_toapis_provider(provider):
+        return await generate_toapis_provider_image(prompt, size, model, reference_images, provider)
+    if is_baofu_provider(provider):
+        return await generate_baofu_provider_image(prompt, size, model, reference_images, provider)
+    if is_bananarouter_provider(provider):
+        return await generate_bananarouter_provider_image(prompt, size, model, reference_images, provider, quality=quality)
+    if is_moonly_provider(provider):
+        return await generate_moonly_provider_image(prompt, size, model, reference_images, provider, quality=quality)
+    if is_grsai_provider(provider):
+        return await generate_grsai_provider_image(prompt, size, model, reference_images, provider)
     if is_volcengine_provider(provider):
         return await generate_volcengine_provider_image(prompt, size, model, reference_images, provider)
     is_gpt2 = is_gpt_image_2_model(model)
     is_apimart = is_apimart_provider(provider)
-    # 不对 GPT 尺寸做任何缩小/拦截：用户选什么尺寸就原样发给上游；
-    # 若超过 GPT 的最大像素限制被上游拒绝，再由 friendly_image_error_detail 给出友好的像素上限提示。
     quality = str(quality or "").strip().lower()
     if quality not in {"low", "medium", "high"}:
         quality = ""
@@ -8652,8 +9575,7 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
     refs = [ref for ref in (reference_images or []) if ref.get("url")]
     mask_refs = [ref for ref in refs if str(ref.get("role") or "").strip().lower() == "mask" or str(ref.get("name") or "").lower().endswith("_mask.png")]
     image_refs = [ref for ref in refs if ref not in mask_refs]
-    image_request_mode = effective_image_request_mode(provider, model)
-    request_timeout = httpx.Timeout(connect=20.0, read=1800.0, write=120.0, pool=20.0) if (is_gpt2 or is_apimart or image_request_mode == "openai-json") else AI_REQUEST_TIMEOUT
+    request_timeout = httpx.Timeout(connect=20.0, read=1800.0, write=120.0, pool=20.0) if (is_gpt2 or is_apimart) else AI_REQUEST_TIMEOUT
     async with httpx.AsyncClient(timeout=request_timeout) as client:
         response = None
         async def post_openai_edits(edit_files=None):
@@ -8667,16 +9589,7 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
                 files=edit_files if edit_files is not None else {},
             )
 
-        if image_request_mode == "openai-json":
-            # Agnes 等“OpenAI JSON 图片接口”统一走 /images/generations：
-            # 不使用 /images/edits，不传顶层 response_format/n/quality；
-            # 文生图只传 extra_body.response_format，图生图把参考图放进 extra_body.image。
-            extra_body = {"response_format": "url"}
-            if image_refs:
-                extra_body["image"] = [reference_to_data_url(ref, max_size=1536) for ref in image_refs[:ONLINE_IMAGE_REFERENCE_MAX]]
-            body = {"model": model, "prompt": prompt, "size": size, "extra_body": extra_body}
-            response = await client.post(gen_url, headers=api_headers(provider=provider, model=model), json=body)
-        elif is_apimart:
+        if is_apimart:
             apimart_size, resolution = apimart_size_resolution(size)
             # APIMart 的 GPT-Image-2 图生图仍走 /images/generations，
             # 通过 image_urls 传参考图，不使用 OpenAI multipart /images/edits。
@@ -8689,7 +9602,7 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
                 "official_fallback": False,
             }
             if image_refs:
-                body["image_urls"] = [reference_to_data_url(ref, max_size=1536) for ref in image_refs[:ONLINE_IMAGE_REFERENCE_MAX]]
+                body["image_urls"] = [reference_to_data_url(ref, max_size=1536) for ref in image_refs[:16]]
             response = await client.post(gen_url, headers=api_headers(provider=provider, model=model), json=body)
         elif is_gpt2 and not image_refs and not mask_refs:
             body = {"model": model, "prompt": prompt, "size": size}
@@ -8706,7 +9619,7 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
             edit_failed_status = None
             edit_failed_text = ""
             try:
-                for ref in image_refs[:ONLINE_IMAGE_REFERENCE_MAX]:
+                for ref in image_refs[:4]:
                     path = output_file_from_url(ref.get("url", ""))
                     if not path:
                         continue
@@ -8740,7 +9653,7 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
                         detail=f"GPT-Image-2 编辑接口 /images/edits 调用失败：{edit_failed_text[:300] or edit_failed_status}。已停止自动重试，避免上游可能已扣费后再次请求。"
                     )
                 print(f"/images/edits failed ({edit_failed_status}): {edit_failed_text[:200]} → 回退到 /images/generations + image:[] JSON")
-                image_payload = [reference_to_data_url(ref, max_size=1536) for ref in image_refs[:ONLINE_IMAGE_REFERENCE_MAX]]
+                image_payload = [reference_to_data_url(ref, max_size=1536) for ref in image_refs[:4]]
                 body = {
                     "model": model, "prompt": prompt, "size": size,
                     "response_format": "url", "n": 1,
@@ -8773,12 +9686,8 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
             task_id = extract_task_id(raw)
             if not task_id:
                 raise
-        try:
-            task_result = await wait_for_image_task(client, task_id, provider)
-            return extract_image(task_result), task_result
-        except HTTPException as exc:
-            setattr(exc, "upstream_task_id", task_id)
-            raise
+        task_result = await wait_for_image_task(client, task_id, provider)
+        return extract_image(task_result), task_result
 
 def upstream_message_from_record(item):
     role = item.get("role")
@@ -9076,6 +9985,658 @@ def download_output(request: Request, url: str, name: str = "", inline: bool = F
             upstream.close()
 
     return StreamingResponse(stream_remote(), media_type=content_type, headers=headers, status_code=upstream.status_code)
+
+EXTERNAL_APP_IDS = {"photoshop", "illustrator", "custom"}
+EXTERNAL_APP_EXECUTABLES = {
+    "photoshop": "Photoshop.exe",
+    "illustrator": "Illustrator.exe",
+}
+EXTERNAL_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff"}
+
+def normalize_external_app_id(app: str) -> str:
+    value = re.sub(r"[^a-z0-9_-]", "", str(app or "custom").strip().lower())
+    return value if value in EXTERNAL_APP_IDS else "custom"
+
+def load_software_settings() -> Dict[str, Any]:
+    if not os.path.exists(SOFTWARE_SETTINGS_FILE):
+        return {"external_apps": {}}
+    try:
+        with open(SOFTWARE_SETTINGS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {"external_apps": {}}
+    except Exception:
+        return {"external_apps": {}}
+
+def save_software_settings(settings: Dict[str, Any]) -> None:
+    os.makedirs(os.path.dirname(SOFTWARE_SETTINGS_FILE), exist_ok=True)
+    safe = settings if isinstance(settings, dict) else {}
+    with open(SOFTWARE_SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(safe, f, ensure_ascii=False, indent=2)
+
+def copy_runtime_file_if_missing(source: str, target: str) -> bool:
+    if not os.path.isfile(source) or os.path.exists(target):
+        return False
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    shutil.copy2(source, target)
+    return True
+
+def copy_runtime_dir_if_missing(source: str, target: str) -> int:
+    if not os.path.isdir(source):
+        return 0
+    copied = 0
+    for root, _, files in os.walk(source):
+        rel_root = os.path.relpath(root, source)
+        dest_root = target if rel_root == "." else os.path.join(target, rel_root)
+        os.makedirs(dest_root, exist_ok=True)
+        for name in files:
+            src_file = os.path.join(root, name)
+            dest_file = os.path.join(dest_root, name)
+            if not os.path.exists(dest_file):
+                shutil.copy2(src_file, dest_file)
+                copied += 1
+    return copied
+
+def migrate_runtime_data_to_storage(storage_root: str) -> Dict[str, Any]:
+    target_paths = runtime_paths_for_storage_root(storage_root, SOFTWARE_SETTINGS_FILE)
+    source_paths = runtime_paths_for_storage_root(STORAGE_ROOT, SOFTWARE_SETTINGS_FILE)
+    copied_files = 0
+    for key in ("canvas_dir", "conversation_dir", "assets_dir", "output_dir"):
+        copied_files += copy_runtime_dir_if_missing(source_paths[key], target_paths[key])
+    for key in ("asset_library_path", "prompt_library_path", "api_providers_file", "runninghub_workflow_store_file", "shared_folders_file", "global_config_file", "history_file"):
+        if copy_runtime_file_if_missing(source_paths[key], target_paths[key]):
+            copied_files += 1
+    for key in ("data_dir", "canvas_dir", "conversation_dir", "assets_dir", "output_dir", "output_input_dir", "output_output_dir", "asset_library_dir", "local_upload_dir"):
+        os.makedirs(target_paths[key], exist_ok=True)
+    return {"copied_files": copied_files, "data_dir": target_paths["data_dir"], "assets_dir": target_paths["assets_dir"], "output_dir": target_paths["output_dir"]}
+
+def normalize_storage_root(value: str) -> str:
+    raw = os.path.expandvars(os.path.expanduser(str(value or "").strip().strip('"')))
+    if not raw:
+        raise HTTPException(status_code=400, detail="Storage folder path is required")
+    folder = os.path.abspath(raw)
+    try:
+        os.makedirs(folder, exist_ok=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Storage folder cannot be created or opened: {exc}") from exc
+    if not os.path.isdir(folder):
+        raise HTTPException(status_code=400, detail="Storage path must be a folder")
+    for protected in (DATA_DIR, ASSETS_DIR, OUTPUT_DIR):
+        protected_abs = os.path.abspath(protected)
+        try:
+            if folder != protected_abs and os.path.commonpath([protected_abs, folder]) == protected_abs:
+                raise HTTPException(status_code=400, detail="Storage folder cannot be inside Hstar runtime folders")
+        except ValueError:
+            continue
+    test_path = os.path.join(folder, ".hstar_write_test")
+    try:
+        with open(test_path, "w", encoding="utf-8") as f:
+            f.write("ok")
+        os.remove(test_path)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Storage folder is not writable: {exc}") from exc
+    return folder
+
+def local_lan_ip() -> str:
+    try:
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.connect(("8.8.8.8", 80))
+            return sock.getsockname()[0]
+        finally:
+            sock.close()
+    except Exception:
+        return "127.0.0.1"
+
+def rotate_collaboration_key() -> str:
+    global COLLABORATION_KEY
+    with COLLABORATION_LOCK:
+        COLLABORATION_KEY = secrets.token_urlsafe(24)
+        return COLLABORATION_KEY
+
+def current_collaboration_key() -> str:
+    with COLLABORATION_LOCK:
+        return COLLABORATION_KEY
+
+def collaboration_urls(request: Request) -> Dict[str, str]:
+    host = str(request.headers.get("host") or "127.0.0.1:3000")
+    port = host.rsplit(":", 1)[-1] if ":" in host else "3000"
+    scheme = "https" if str(request.url.scheme).lower() == "https" else "http"
+    key = urllib.parse.quote(current_collaboration_key(), safe="")
+    return {"local_url": f"{scheme}://127.0.0.1:{port}/", "lan_url": f"{scheme}://{local_lan_ip()}:{port}/?collab_key={key}"}
+
+def validate_external_executable(path: str) -> str:
+    text = os.path.expandvars(os.path.expanduser(str(path or "").strip().strip('"')))
+    if not text:
+        raise HTTPException(status_code=400, detail="External application path is required")
+    abs_path = os.path.abspath(text)
+    if not os.path.isfile(abs_path):
+        raise HTTPException(status_code=404, detail=f"External application was not found: {abs_path}")
+    if os.path.splitext(abs_path)[1].lower() != ".exe":
+        raise HTTPException(status_code=400, detail="External application path must point to an .exe file")
+    return abs_path
+
+def external_app_search_roots() -> List[str]:
+    roots = []
+    for env_name in ("ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"):
+        value = os.environ.get(env_name)
+        if value:
+            roots.append(value)
+    if os.name == "nt":
+        for drive in ("D", "E", "C"):
+            root = f"{drive}:\\"
+            if os.path.isdir(root):
+                roots.append(root)
+    unique = []
+    seen = set()
+    for root in roots:
+        abs_root = os.path.abspath(root)
+        key = abs_root.lower()
+        if key not in seen and os.path.isdir(abs_root):
+            unique.append(abs_root)
+            seen.add(key)
+    return unique
+
+def find_external_app_executable(app: str) -> str:
+    app = normalize_external_app_id(app)
+    settings = load_software_settings()
+    saved = ((settings.get("external_apps") or {}).get(app) or {}).get("path")
+    if saved:
+        try:
+            return validate_external_executable(saved)
+        except HTTPException:
+            pass
+    exe_name = EXTERNAL_APP_EXECUTABLES.get(app)
+    if not exe_name:
+        return ""
+    exact_candidates = []
+    for root in external_app_search_roots():
+        exact_candidates.extend([
+            os.path.join(root, "Adobe", "Adobe Photoshop 2026", exe_name),
+            os.path.join(root, "Adobe", "Adobe Photoshop 2025", exe_name),
+            os.path.join(root, "Adobe", "Adobe Photoshop 2024", exe_name),
+            os.path.join(root, "Adobe", "Adobe Photoshop 2023", exe_name),
+            os.path.join(root, "Adobe", "Adobe Illustrator 2026", "Support Files", "Contents", "Windows", exe_name),
+            os.path.join(root, "Adobe", "Adobe Illustrator 2025", "Support Files", "Contents", "Windows", exe_name),
+            os.path.join(root, "Adobe", "Adobe Illustrator 2024", "Support Files", "Contents", "Windows", exe_name),
+            os.path.join(root, "Adobe", "Adobe Illustrator 2023", "Support Files", "Contents", "Windows", exe_name),
+        ])
+    for candidate in exact_candidates:
+        if os.path.isfile(candidate):
+            return os.path.abspath(candidate)
+    for root in external_app_search_roots():
+        try:
+            for current_root, dirs, files in os.walk(root):
+                depth = os.path.relpath(current_root, root).count(os.sep)
+                if depth > 5:
+                    dirs[:] = []
+                    continue
+                if exe_name in files:
+                    return os.path.abspath(os.path.join(current_root, exe_name))
+                lowered = current_root.lower()
+                if depth == 0:
+                    dirs[:] = [d for d in dirs if any(token in d.lower() for token in ("adobe", "ps", "ai", "photoshop", "illustrator"))]
+                elif not any(token in lowered for token in ("adobe", "ps", "ai", "photoshop", "illustrator")):
+                    dirs[:] = []
+        except Exception:
+            continue
+    return ""
+
+def choose_folder_path(title: str, initial_dir: str = "") -> str:
+    if os.name != "nt":
+        raise HTTPException(status_code=501, detail="Folder picker is supported on Windows only")
+    initial = os.path.abspath(os.path.expanduser(os.path.expandvars(initial_dir))) if initial_dir else ""
+    if initial and not os.path.isdir(initial):
+        initial = ""
+    escaped_title = str(title or "Select Folder").replace("'", "''")
+    escaped_dir = initial.replace("'", "''")
+    ps = f"""
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class HstarNativeWindow {{
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out HstarRect lpRect);
+  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+}}
+public struct HstarRect {{
+  public int Left;
+  public int Top;
+  public int Right;
+  public int Bottom;
+}}
+"@
+$owner = New-Object System.Windows.Forms.Form
+$owner.Text = [string]::Concat('HstarA - ', [char]0x8BF7,[char]0x9009,[char]0x62E9,[char]0x50A8,[char]0x5B58,[char]0x4F4D,[char]0x7F6E)
+$owner.StartPosition = 'CenterScreen'
+$owner.Size = New-Object System.Drawing.Size(1, 1)
+$owner.MinimizeBox = $false
+$owner.MaximizeBox = $false
+$owner.FormBorderStyle = 'None'
+$owner.Opacity = 0
+$owner.ShowInTaskbar = $true
+$owner.TopMost = $true
+$owner.Show()
+$owner.WindowState = 'Normal'
+$null = [HstarNativeWindow]::ShowWindow($owner.Handle, 5)
+$owner.Activate()
+$owner.BringToFront()
+$null = [HstarNativeWindow]::SetForegroundWindow($owner.Handle)
+$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+$dialog.Description = '{escaped_title}'
+$dialog.ShowNewFolderButton = $true
+if ('{escaped_dir}') {{ $dialog.SelectedPath = '{escaped_dir}' }}
+try {{
+  $result = $dialog.ShowDialog($owner)
+  if ($result -eq [System.Windows.Forms.DialogResult]::OK) {{ Write-Output $dialog.SelectedPath }}
+}} finally {{
+  $owner.Close()
+  $owner.Dispose()
+}}
+"""
+    try:
+        completed = subprocess.run(["powershell", "-NoProfile", "-STA", "-Command", ps], capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=300)
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(status_code=504, detail="Folder picker timed out") from exc
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "Folder picker failed").strip()
+        raise HTTPException(status_code=500, detail=detail)
+    selected = (completed.stdout or "").strip().splitlines()
+    return os.path.abspath(selected[-1].strip()) if selected else ""
+
+def choose_external_executable_path(app: str = "custom") -> str:
+    if os.name != "nt":
+        raise HTTPException(status_code=501, detail="Executable picker is supported on Windows only")
+    app_id = normalize_external_app_id(app)
+    saved = ((load_software_settings().get("external_apps") or {}).get(app_id) or {}).get("path")
+    initial_dir = ""
+    if saved:
+        saved_dir = os.path.dirname(os.path.abspath(os.path.expanduser(os.path.expandvars(str(saved)))))
+        if os.path.isdir(saved_dir):
+            initial_dir = saved_dir
+    escaped_dir = initial_dir.replace("'", "''")
+    ps = f"""
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class HstarNativeWindow {{
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+  [DllImport("user32.dll", SetLastError=true, CharSet=CharSet.Auto)] public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out HstarRect lpRect);
+  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+}}
+public struct HstarRect {{
+  public int Left;
+  public int Top;
+  public int Right;
+  public int Bottom;
+}}
+"@
+$owner = New-Object System.Windows.Forms.Form
+$owner.Text = 'HstarA - Select external application'
+$owner.StartPosition = 'CenterScreen'
+$owner.Size = New-Object System.Drawing.Size(1, 1)
+$owner.MinimizeBox = $false
+$owner.MaximizeBox = $false
+$owner.FormBorderStyle = 'None'
+$owner.Opacity = 0
+$owner.ShowInTaskbar = $true
+$owner.TopMost = $true
+$owner.Show()
+$owner.WindowState = 'Normal'
+$null = [HstarNativeWindow]::ShowWindow($owner.Handle, 5)
+$owner.Activate()
+$owner.BringToFront()
+$null = [HstarNativeWindow]::SetForegroundWindow($owner.Handle)
+$dialog = New-Object System.Windows.Forms.OpenFileDialog
+$dialog.Title = '选择软件'
+$dialog.Filter = 'Executable Files (*.exe)|*.exe|All Files (*.*)|*.*'
+$dialog.CheckFileExists = $true
+$dialog.Multiselect = $false
+if ('{escaped_dir}') {{ $dialog.InitialDirectory = '{escaped_dir}' }}
+try {{
+  $result = $dialog.ShowDialog($owner)
+  if ($result -eq [System.Windows.Forms.DialogResult]::OK) {{
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    Write-Output $dialog.FileName
+  }}
+}} finally {{
+  $owner.Close()
+  $owner.Dispose()
+}}
+"""
+    try:
+        completed = subprocess.run(
+            ["powershell", "-NoProfile", "-STA", "-Command", ps],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+            timeout=300,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(status_code=504, detail="Executable picker timed out") from exc
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "Executable picker failed").strip()
+        raise HTTPException(status_code=500, detail=detail)
+    selected = (completed.stdout or "").strip().splitlines()
+    if not selected:
+        return ""
+    return validate_external_executable(selected[-1].strip())
+
+def local_external_image_path(url: str) -> str:
+    path = output_file_from_url(url)
+    if not path:
+        path = local_media_file_by_basename(filename_from_media_url(url, ""))
+    if not path:
+        raise HTTPException(status_code=404, detail="Local output image was not found")
+    ext = os.path.splitext(path)[1].lower()
+    if ext not in EXTERNAL_IMAGE_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="External open supports image files only")
+    return os.path.abspath(path)
+
+def launch_external_app(executable: str, image_path: str) -> None:
+    executable = validate_external_executable(executable)
+    image_path = os.path.abspath(image_path)
+    if not os.path.isfile(image_path):
+        raise HTTPException(status_code=404, detail="Image file was not found")
+    try:
+        flags = 0
+        if os.name == "nt":
+            flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+        subprocess.Popen(
+            [executable, image_path],
+            cwd=os.path.dirname(executable) or None,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+            creationflags=flags,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to launch external application: {exc}") from exc
+
+def save_bytes_to_path(content: bytes, target_path: str) -> str:
+    if not content:
+        raise HTTPException(status_code=400, detail="没有可保存的文件内容")
+    target_path = os.path.abspath(os.path.expanduser(os.path.expandvars(target_path)))
+    os.makedirs(os.path.dirname(target_path), exist_ok=True)
+    with open(target_path, "wb") as f:
+        f.write(content)
+    return target_path
+
+def last_output_download_folder() -> str:
+    folder = str(load_software_settings().get("output_download_folder") or "")
+    if not folder:
+        return ""
+    folder = os.path.abspath(os.path.expanduser(os.path.expandvars(folder)))
+    return folder if os.path.isdir(folder) else ""
+
+def choose_save_output_path(suggested_name: str, initial_dir: str = "") -> tuple[str, str]:
+    suggested_name = sanitize_export_filename(suggested_name or "output.png", "output.png")
+    if os.name != "nt":
+        raise HTTPException(status_code=501, detail="System save dialog is supported on Windows only")
+    initial_dir = os.path.abspath(os.path.expanduser(os.path.expandvars(initial_dir))) if initial_dir else ""
+    if initial_dir and not os.path.isdir(initial_dir):
+        initial_dir = ""
+    if not initial_dir:
+        initial_dir = last_output_download_folder()
+    escaped_name = suggested_name.replace("'", "''")
+    escaped_dir = initial_dir.replace("'", "''")
+    ps = f"""
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class HstarNativeWindow {{
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+}}
+"@
+$owner = New-Object System.Windows.Forms.Form
+$owner.Text = [string]::Concat('HstarA - ', [char]0x8BF7,[char]0x9009,[char]0x62E9,[char]0x50A8,[char]0x5B58,[char]0x4F4D,[char]0x7F6E)
+$owner.StartPosition = 'CenterScreen'
+$owner.Size = New-Object System.Drawing.Size(1, 1)
+$owner.MinimizeBox = $false
+$owner.MaximizeBox = $false
+$owner.FormBorderStyle = 'None'
+$owner.Opacity = 0
+$owner.ShowInTaskbar = $true
+$owner.TopMost = $true
+$owner.Show()
+$owner.WindowState = 'Normal'
+$null = [HstarNativeWindow]::ShowWindow($owner.Handle, 5)
+$owner.Activate()
+$owner.BringToFront()
+$null = [HstarNativeWindow]::SetForegroundWindow($owner.Handle)
+$dialog = New-Object System.Windows.Forms.SaveFileDialog
+$dialog.Title = [string]::Concat([char]0x8BF7,[char]0x9009,[char]0x62E9,[char]0x50A8,[char]0x5B58,[char]0x4F4D,[char]0x7F6E)
+$dialog.FileName = '{escaped_name}'
+$dialog.Filter = 'Image Files (*.png;*.jpg;*.jpeg;*.webp;*.gif)|*.png;*.jpg;*.jpeg;*.webp;*.gif|ZIP Archive (*.zip)|*.zip|Video Files (*.mp4;*.webm;*.mov;*.m4v)|*.mp4;*.webm;*.mov;*.m4v|Audio Files (*.mp3;*.wav;*.m4a;*.aac;*.ogg;*.flac)|*.mp3;*.wav;*.m4a;*.aac;*.ogg;*.flac|Text Files (*.txt)|*.txt|All Files (*.*)|*.*'
+$ext = [System.IO.Path]::GetExtension($dialog.FileName).ToLowerInvariant()
+if ($ext -eq '.zip') {{ $dialog.FilterIndex = 2 }}
+elseif ($ext -in '.mp4','.webm','.mov','.m4v') {{ $dialog.FilterIndex = 3 }}
+elseif ($ext -in '.mp3','.wav','.m4a','.aac','.ogg','.flac') {{ $dialog.FilterIndex = 4 }}
+elseif ($ext -eq '.txt') {{ $dialog.FilterIndex = 5 }}
+elseif ($ext) {{ $dialog.FilterIndex = 1 }}
+$dialog.OverwritePrompt = $true
+$dialog.AddExtension = $true
+if ('{escaped_dir}') {{ $dialog.InitialDirectory = '{escaped_dir}' }}
+$centerAttempts = 0
+$centerTimer = New-Object System.Windows.Forms.Timer
+$centerTimer.Interval = 50
+$centerTimer.Add_Tick({{
+  try {{
+    $script:centerAttempts += 1
+    $hwnd = [HstarNativeWindow]::FindWindow([NullString]::Value, $dialog.Title)
+    if ($hwnd -ne [IntPtr]::Zero) {{
+      $centerTimer.Stop()
+      $rect = [HstarRect]::new()
+      if ([HstarNativeWindow]::GetWindowRect($hwnd, [ref]$rect)) {{
+        $width = [Math]::Max(1, $rect.Right - $rect.Left)
+        $height = [Math]::Max(1, $rect.Bottom - $rect.Top)
+        $area = [System.Windows.Forms.Screen]::FromHandle($hwnd).WorkingArea
+        $x = [int]($area.Left + (($area.Width - $width) / 2))
+        $y = [int]($area.Top + (($area.Height - $height) / 2))
+        $null = [HstarNativeWindow]::SetWindowPos($hwnd, [IntPtr]::new(-1), $x, $y, 0, 0, 0x0001 -bor 0x0040)
+        $null = [HstarNativeWindow]::SetForegroundWindow($hwnd)
+      }}
+    }} elseif ($script:centerAttempts -ge 30) {{
+      $centerTimer.Stop()
+    }}
+  }} catch {{
+    $centerTimer.Stop()
+  }}
+}})
+try {{
+  $centerTimer.Start()
+  $result = $dialog.ShowDialog($owner)
+  if ($result -eq [System.Windows.Forms.DialogResult]::OK) {{
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    Write-Output $dialog.FileName
+  }}
+}} finally {{
+  $centerTimer.Stop()
+  $centerTimer.Dispose()
+  $owner.Close()
+  $owner.Dispose()
+}}
+"""
+    try:
+        completed = subprocess.run(
+            ["powershell", "-NoProfile", "-STA", "-Command", ps],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+            timeout=300,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(status_code=504, detail="Save dialog timed out") from exc
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "Save dialog failed").strip()
+        raise HTTPException(status_code=500, detail=detail)
+    selected = (completed.stdout or "").strip().splitlines()
+    if not selected:
+        return "", initial_dir
+    target_path = os.path.abspath(selected[-1].strip())
+    return target_path, os.path.dirname(target_path)
+
+@app.post("/api/software-settings/external-app")
+def save_external_app_setting(payload: ExternalAppSaveRequest):
+    app_id = normalize_external_app_id(payload.app)
+    exe_path = validate_external_executable(payload.path)
+    settings = load_software_settings()
+    external_apps = settings.get("external_apps")
+    if not isinstance(external_apps, dict):
+        external_apps = {}
+    external_apps[app_id] = {"path": exe_path, "updated_at": int(time.time())}
+    settings["external_apps"] = external_apps
+    save_software_settings(settings)
+    return {"ok": True, "app": app_id, "path": exe_path}
+
+@app.get("/api/software-settings")
+def get_software_settings():
+    settings = load_software_settings()
+    return {
+        "settings": {
+            **settings,
+            "active_storage_root": STORAGE_ROOT,
+            "active_data_dir": DATA_DIR,
+            "active_assets_dir": ASSETS_DIR,
+            "active_output_dir": OUTPUT_DIR,
+        }
+    }
+
+@app.post("/api/software-settings/storage")
+def save_software_storage(payload: SoftwareStorageRequest):
+    settings = load_software_settings()
+    storage_root = normalize_storage_root(payload.storage_root)
+    migration = migrate_runtime_data_to_storage(storage_root)
+    settings["storage_root"] = storage_root
+    save_software_settings(settings)
+    return {
+        "settings": {
+            **settings,
+            "migration": migration,
+            "message": "Storage saved. Restart Hstar to use this folder for canvas, assets, output, and history data.",
+        }
+    }
+
+@app.get("/api/collaboration-link")
+def collaboration_link(request: Request):
+    urls = collaboration_urls(request)
+    return {**urls, "expires": "Valid while this Hstar service is running."}
+
+@app.post("/api/collaboration-link/refresh")
+def refresh_collaboration_link(request: Request):
+    previous = collaboration_urls(request)
+    rotate_collaboration_key()
+    refreshed = collaboration_urls(request)
+    return {**refreshed, "expires": "Valid while this Hstar service is running.", "previous": previous}
+
+@app.post("/api/native/choose-executable")
+def choose_external_executable(payload: ExternalAppSaveRequest):
+    app_id = normalize_external_app_id(payload.app)
+    found = choose_external_executable_path(app_id)
+    return {"ok": True, "app": app_id, "path": found}
+
+@app.post("/api/open-external-image")
+def open_external_image(payload: ExternalImageOpenRequest):
+    app_id = normalize_external_app_id(payload.app)
+    image_path = local_external_image_path(payload.url)
+    executable = find_external_app_executable(app_id)
+    if not executable:
+        label = "Photoshop" if app_id == "photoshop" else "Illustrator" if app_id == "illustrator" else "custom application"
+        raise HTTPException(status_code=404, detail=f"{label} executable was not found. Bind an .exe path first.")
+    launch_external_app(executable, image_path)
+    return {"ok": True, "app": app_id, "path": executable, "image": image_path}
+
+@app.get("/api/output-download-folder")
+def output_download_folder():
+    settings = load_software_settings()
+    folder = str(settings.get("output_download_folder") or "")
+    if folder and not os.path.isdir(folder):
+        folder = ""
+    return {"folder": folder}
+
+@app.post("/api/native/choose-folder")
+def choose_native_folder(payload: NativeFolderRequest):
+    if payload.purpose == "storage":
+        initial_dir = payload.initial_dir or STORAGE_ROOT
+        return {"path": choose_folder_path("Select Hstar data storage folder", initial_dir)}
+    initial_dir = payload.initial_dir or last_output_download_folder()
+    return {"path": choose_folder_path("Select output folder", initial_dir)}
+
+@app.post("/api/native/save-output-batch")
+def save_output_batch(payload: SaveOutputBatchRequest):
+    items = [item for item in (payload.items or []) if isinstance(item, dict) and str(item.get("url") or "").strip()]
+    if not items:
+        raise HTTPException(status_code=400, detail="没有可保存的图片")
+    folder = choose_folder_path("Select output folder", payload.initial_dir or last_output_download_folder())
+    if not folder:
+        return {"ok": False, "cancelled": True, "count": 0}
+    os.makedirs(folder, exist_ok=True)
+    saved = []
+    used = set()
+    for index, item in enumerate(items, 1):
+        url = str(item.get("url") or "")
+        requested = str(item.get("name") or "").strip()
+        content, _content_type, source_name = media_bytes_from_url(url)
+        fallback = source_name or f"output-{index}.png"
+        name = sanitize_export_filename(os.path.basename(requested) if requested else fallback, fallback)
+        stem, ext = os.path.splitext(name)
+        if not ext:
+            ext = os.path.splitext(fallback)[1] or ".png"
+        candidate = f"{stem or 'output'}{ext}"
+        n = 2
+        while candidate.lower() in used or os.path.exists(os.path.join(folder, candidate)):
+            candidate = f"{stem or 'output'}-{n}{ext}"
+            n += 1
+        used.add(candidate.lower())
+        saved_path = save_bytes_to_path(content, os.path.join(folder, candidate))
+        saved.append({"path": saved_path, "filename": candidate})
+    settings = load_software_settings()
+    settings["output_download_folder"] = folder
+    save_software_settings(settings)
+    return {"ok": True, "cancelled": False, "folder": folder, "count": len(saved), "files": saved}
+
+@app.post("/api/native/save-output-as")
+def save_output_as(payload: SaveOutputAsRequest):
+    content = b""
+    source_name = "output.png"
+    if payload.content_base64:
+        try:
+            content = base64.b64decode(payload.content_base64, validate=True)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="文件内容编码无效") from exc
+        source_name = payload.name or "download.bin"
+    else:
+        content, _content_type, source_name = media_bytes_from_url(payload.url)
+    suggested_name = sanitize_export_filename(payload.name or source_name, source_name or "output.png")
+    target_path, folder = choose_save_output_path(suggested_name, payload.initial_dir)
+    if not target_path:
+        return {"ok": False, "cancelled": True}
+    saved_path = save_bytes_to_path(content, target_path)
+    settings = load_software_settings()
+    settings["output_download_folder"] = folder or os.path.dirname(saved_path)
+    save_software_settings(settings)
+    return {
+        "ok": True,
+        "cancelled": False,
+        "path": saved_path,
+        "folder": os.path.dirname(saved_path),
+        "filename": os.path.basename(saved_path),
+    }
 
 @app.post("/api/upload")
 async def upload_image(files: List[UploadFile] = File(...)):
@@ -9727,6 +11288,53 @@ async def move_local_assets(payload: dict, request: Request):
     tree, items = _local_upload_tree_and_items()
     return {"ok": True, "moved": moved, "items": items, "tree": tree}
 
+async def identify_image_marker(payload: ImageMarkerIdentifyRequest):
+    provider_id = payload.provider or "comfly"
+    chat_base, chat_hdrs, resolved_model = resolve_chat_provider(provider_id, payload.model, payload.ms_model)
+    thumb_url = payload.thumbnail if str(payload.thumbnail or "").startswith("data:image/") else ""
+    image_url = media_reference_to_url(payload.image_url, max_image_size=1280) if payload.image_url else ""
+    if not image_url and not thumb_url:
+        raise HTTPException(status_code=400, detail="image_url or thumbnail is required")
+    content = [{
+        "type": "text",
+        "text": (
+            "Identify the complete object that the marked point belongs to, not just the tiny part under the point. "
+            "Use the local crop to locate the point, then use the full image context to name the whole object. "
+            "Return a precise Simplified Chinese phrase within 9 Chinese characters: key adjective plus whole object name. "
+            "Prefer useful attributes like color, shape, material, pattern, or style when visible. "
+            "Examples: 米色方抱枕, 红色落地灯, 圆形木茶几. No punctuation, no explanation. "
+            f"Marker #{payload.number}, normalized position x={payload.x:.4f}, y={payload.y:.4f}. "
+            "If the point is on a component such as a lampshade, cushion corner, chair leg, or handle, name the parent object such as 落地灯, 抱枕, 椅子, or 柜子."
+        ),
+    }]
+    if thumb_url:
+        content.append({"type": "image_url", "image_url": {"url": thumb_url}})
+    if image_url:
+        content.append({"type": "image_url", "image_url": {"url": image_url}})
+    messages = [
+        {"role": "system", "content": "You are a precise visual labeling assistant for image annotation."},
+        {"role": "user", "content": content},
+    ]
+    llm_provider = get_api_provider(provider_id) if provider_id not in ("modelscope",) else {}
+    try:
+        async with httpx.AsyncClient(timeout=AI_REQUEST_TIMEOUT) as client:
+            response = await client.post(
+                f"{chat_base}/chat/completions",
+                headers=chat_hdrs,
+                json={"model": resolved_model, "messages": messages},
+            )
+            response.raise_for_status()
+            raw = response.json()
+    except httpx.HTTPStatusError as exc:
+        body = exc.response.text or ""
+        friendly = friendly_chat_error_detail(body, resolved_model, llm_provider)
+        raise HTTPException(status_code=exc.response.status_code, detail=friendly or body[:500]) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"request failed: {exc}") from exc
+    text = text_from_chat_response(raw).strip() if isinstance(raw, dict) else ""
+    object_name = "".join(list(re.sub(r"[\r\n]+", " ", text).strip().strip('\"“”‘’`.,，。:：;；'))[:9])
+    return {"object_name": object_name, "text": text, "model": resolved_model}
+
 @app.post("/api/local-assets/caption")
 async def caption_local_assets(payload: LocalAssetCaptionRequest):
     prompt = (payload.prompt or "描述图片").strip() or "描述图片"
@@ -10093,16 +11701,13 @@ async def runninghub_query(taskId: str = ""):
         code = raw.get("code") if isinstance(raw, dict) else None
         status = "PENDING"
         urls = []
-        image_items = []
         if code in (0, "0"):
             status = "SUCCESS"
             for remote in runninghub_extract_outputs(raw.get("data")):
                 try:
-                    local_url = await runninghub_store_remote_output(client, remote)
+                    urls.append(await runninghub_store_remote_output(client, remote))
                 except Exception:
-                    local_url = remote
-                urls.append(local_url)
-                image_items.append(image_output_meta(local_url))
+                    urls.append(remote)
         elif code in (804, "804"):
             status = "RUNNING"
         elif code in (813, "813"):
@@ -10111,7 +11716,7 @@ async def runninghub_query(taskId: str = ""):
             status = "FAILED"
         else:
             status = "UNKNOWN"
-        return {"success": True, "data": {"status": status, "urls": urls, "image_items": image_items, "failReason": runninghub_fail_reason(raw), "code": code, "raw": raw}}
+        return {"success": True, "data": {"status": status, "urls": urls, "failReason": runninghub_fail_reason(raw), "code": code, "raw": raw}}
 
 @app.post("/api/runninghub/upload-asset")
 async def runninghub_upload_asset(payload: RunningHubUploadAssetRequest):
@@ -10410,15 +12015,25 @@ class TestConnectionPayload(BaseModel):
 
 def protocol_from_payload(payload):
     provider_id = str(getattr(payload, "provider_id", "") or "").strip().lower()
+    base_url = str(getattr(payload, "base_url", "") or "").strip().lower()
     if provider_id == "volcengine":
         return "volcengine"
     if provider_id == "runninghub":
         return "runninghub"
     if provider_id == "jimeng":
         return "jimeng"
-    base_url = str(getattr(payload, "base_url", "") or "").strip().lower()
-    if "runninghub.cn" in base_url or "runninghub.ai" in base_url:
-        return "runninghub"
+    if provider_id == "linapi" or "linapi.net" in base_url:
+        return "linapi"
+    if provider_id == "grsai" or "grsai.dakka.com.cn" in base_url or "grsaiapi.com" in base_url:
+        return "grsai"
+    if provider_id == "toapis" or "toapis.com" in base_url:
+        return "toapis"
+    if provider_id == "baofu" or "baofu" in base_url:
+        return "baofu"
+    if provider_id == "bananarouter" or "bananarouter.com" in base_url:
+        return "bananarouter"
+    if provider_id == "moonly" or "relay.moonlyai.com" in base_url:
+        return "moonly"
     protocol = str(getattr(payload, "protocol", "") or "openai").strip().lower()
     return protocol if protocol in SUPPORTED_PROVIDER_PROTOCOLS else "openai"
 
@@ -10441,19 +12056,26 @@ def api_key_from_payload(payload, protocol: str = ""):
     return ""
 
 def upstream_models_url(base_url: str, protocol: str):
+    if protocol == "linapi":
+        base_url = linapi_base_url({"base_url": base_url})
+        return f"{base_url}/models" if base_url.endswith("/v1") else f"{base_url}/v1/models"
     if protocol == "gemini":
         return f"{base_url}/models" if base_url.endswith("/v1beta") else f"{base_url}/v1beta/models"
     if protocol == "volcengine":
         return f"{base_url}/models" if base_url.endswith("/api/v3") else f"{base_url}/api/v3/models"
     if protocol == "runninghub":
-        return runninghub_openapi_url({"base_url": base_url}, "models")
+        return f"{base_url}/openapi/v2/models"
     return f"{base_url}/models" if base_url.endswith("/v1") else f"{base_url}/v1/models"
 
 def upstream_model_headers(api_key: str, protocol: str):
     if protocol == "gemini":
         return {"x-goog-api-key": api_key, "Accept": "application/json"}
-    if protocol == "runninghub":
+    if protocol == "linapi":
         return {"Authorization": bearer_auth_value(api_key), "Accept": "application/json"}
+    if protocol == "grsai":
+        return {"Authorization": bearer_auth_value(api_key), "Accept": "application/json"}
+    if protocol == "runninghub":
+        return {"Authorization": strip_auth_scheme(api_key, "Bearer"), "Accept": "application/json"}
     return {"Authorization": bearer_auth_value(api_key), "Accept": "application/json"}
 
 def volcengine_default_model_payload(status=200, message="", raw=None):
@@ -10644,21 +12266,6 @@ async def test_provider_connection(payload: TestConnectionPayload):
             "all": [*JIMENG_DEFAULT_IMAGE_MODELS, *JIMENG_DEFAULT_VIDEO_MODELS],
             "raw": status.get("raw"),
         }
-    if protocol == "runninghub":
-        provider = {"id": "runninghub", "name": "RunningHub", "base_url": (payload.base_url or RUNNINGHUB_DEFAULT_BASE_URL).strip().rstrip("/"), "protocol": "runninghub", "api_key": api_key_from_payload(payload, protocol)}
-        payload_models = await runninghub_models_payload(provider)
-        return {
-            "ok": True,
-            "status": 200,
-            "message": "RunningHub OpenAPI 可用，已拉取官方直连模型注册表。",
-            "model_count": payload_models["total"],
-            "image_models": payload_models["image_models"],
-            "chat_models": payload_models["chat_models"],
-            "video_models": payload_models["video_models"],
-            "all": payload_models["all"],
-            "protocol": "runninghub",
-            "raw": payload_models.get("raw"),
-        }
     base_url = (payload.base_url or "").strip().rstrip("/")
     if not base_url:
         raise HTTPException(status_code=400, detail="请先填写请求地址")
@@ -10668,6 +12275,8 @@ async def test_provider_connection(payload: TestConnectionPayload):
     if not api_key:
         key_name = "方舟 API Key" if protocol == "volcengine" else "API Key"
         raise HTTPException(status_code=400, detail=f"请先填写或保存 {key_name}")
+    if protocol == "grsai":
+        return grsai_default_model_payload(status=200, message="Grsai 协议可用；模型列表使用 Grsai 文档内置模型。", raw={"base_url": base_url})
     url = upstream_models_url(base_url, protocol)
     try:
         async with httpx.AsyncClient(timeout=15) as client:
@@ -10684,38 +12293,23 @@ async def test_provider_connection(payload: TestConnectionPayload):
                 if protocol == "volcengine":
                     detected, probe = await probe_volcengine_auto_detect(client, base_url, api_key)
                     if detected:
-                        message = f"{probe.get('message') or '方舟任务接口可达'}；但 /api/v3/models 不可用。请按实际方舟控制台模型名称手动填写视频模型。"
-                        return volcengine_default_model_payload(status=probe.get("status") or resp.status_code, message=message, raw={"models_error": resp.text[:300], **(probe.get("raw") or {})})
-                elif protocol == "openai":
-                    detected, probe = await probe_volcengine_auto_detect(client, base_url, api_key)
-                    if detected:
-                        message = f"{probe.get('message') or '检测到方舟/Ark 兼容入口'}；OpenAI /v1/models 不可用，已自动切换为方舟协议。请按实际方舟控制台模型名称手动填写视频模型。"
+                        message = f"{probe.get('message') or '方舟任务接口可达'}；但 /api/v3/models 不可用，已使用默认 Seedance 模型。"
                         return volcengine_default_model_payload(status=probe.get("status") or resp.status_code, message=message, raw={"models_error": resp.text[:300], **(probe.get("raw") or {})})
                 return {"ok": False, "status": resp.status_code, "message": resp.text[:300]}
             data = resp.json() if resp.text else {}
             grouped, ids = parse_upstream_models(data, protocol)
-            grouped, ids = apply_agnes_model_defaults(base_url, grouped, ids)
             if protocol == "volcengine" and not ids:
                 detected, probe = await probe_volcengine_auto_detect(client, base_url, api_key)
                 if detected:
                     return volcengine_default_model_payload(status=resp.status_code, raw=data)
-            return {
-                "ok": True,
-                "status": resp.status_code,
-                "model_count": len(ids),
-                "image_models": grouped["image"],
-                "chat_models": grouped["chat"],
-                "video_models": grouped["video"],
-                "all": ids,
-                "image_request_mode": detect_image_request_mode(base_url, ids) or normalize_image_request_mode(getattr(payload, "image_request_mode", "")),
-            }
+            return {"ok": True, "protocol": protocol, "status": resp.status_code, "model_count": len(ids), "image_models": grouped["image"], "chat_models": grouped["chat"], "video_models": grouped["video"], "all": ids}
     except httpx.HTTPError as e:
         if protocol == "volcengine":
             try:
                 async with httpx.AsyncClient(timeout=15) as client:
                     detected, probe = await probe_volcengine_auto_detect(client, base_url, api_key)
                     if detected:
-                        message = f"{probe.get('message') or '方舟任务接口可达'}；但模型列表请求失败。请按实际方舟控制台模型名称手动填写视频模型。"
+                        message = f"{probe.get('message') or '方舟任务接口可达'}；但模型列表请求失败，已使用默认 Seedance 模型。"
                         return volcengine_default_model_payload(status=probe.get("status") or 0, message=message, raw={"models_error": str(e)[:300], **(probe.get("raw") or {})})
             except Exception:
                 pass
@@ -10835,7 +12429,7 @@ async def probe_async_endpoint(payload: TestConnectionPayload):
                     }
             return {
                 "ok": openai_ok,
-                "protocol": "openai",
+                "protocol": "baofu" if protocol == "baofu" else "openai",
                 "status_code": openai_probe.get("status") or sc,
                 "message": openai_probe.get("message") or "OpenAI 兼容验证完成",
                 "raw": {"async_probe": async_probe, "openai_probe": openai_probe.get("raw")},
@@ -11000,13 +12594,11 @@ async def build_online_image_result(payload: OnlineImageRequest):
         except HTTPException:
             image_items = [image_data]
         local_urls = []
-        local_items = []
         for item in image_items:
             local_url = await save_ai_image_to_output(item, prefix="online_")
             if local_url:
                 local_urls.append(local_url)
-                local_items.append(image_output_meta(local_url, item))
-        return local_urls, local_items, raw_item
+        return local_urls, raw_item
     try:
         generated = await asyncio.gather(*(generate_one() for _ in range(count)))
     except httpx.HTTPStatusError as exc:
@@ -11019,9 +12611,8 @@ async def build_online_image_result(payload: OnlineImageRequest):
         log_net_error(f"生图 网络/TLS错误 provider={provider.get('id')} model={model}", exc)
         raise HTTPException(status_code=502, detail=f"请求上游生图接口失败：{exc}") from exc
 
-    local_urls = [url for urls, _items, _raw in generated for url in (urls or []) if url]
-    local_items = [item for _urls, items, _raw in generated for item in (items or []) if item.get("url")]
-    raw = generated[0][2] if generated else {}
+    local_urls = [url for urls, _raw in generated for url in (urls or []) if url]
+    raw = generated[0][1] if generated else {}
     if not local_urls:
         provider_name = provider.get("name") or provider["id"]
         raw_text = json.dumps(raw, ensure_ascii=False)[:800] if isinstance(raw, (dict, list)) else str(raw)[:800]
@@ -11029,7 +12620,6 @@ async def build_online_image_result(payload: OnlineImageRequest):
     result = {
         "prompt": payload.prompt,
         "images": local_urls,
-        "image_items": local_items,
         "timestamp": time.time(),
         "type": "online",
         "model": model,
@@ -11055,7 +12645,7 @@ async def query_image_task(payload: ImageTaskQueryRequest):
     task_id = str(payload.task_id or "").strip()
     timeout = httpx.Timeout(connect=20.0, read=300.0, write=60.0, pool=20.0)
     try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, trust_env=not is_moonly_provider(provider)) as client:
             raw = await fetch_image_task_payload(client, task_id, provider)
     except httpx.HTTPStatusError as exc:
         log_net_error(f"查询生图任务 HTTP状态错误 provider={provider.get('id')} task_id={task_id}", exc)
@@ -11073,17 +12663,14 @@ async def query_image_task(payload: ImageTaskQueryRequest):
         image_items = []
     if image_items:
         local_urls = []
-        local_items = []
         for item in image_items:
             local_url = await save_ai_image_to_output(item, prefix="online_")
             if local_url:
                 local_urls.append(local_url)
-                local_items.append(image_output_meta(local_url, item))
         result = {
             "status": "succeeded",
             "prompt": "",
             "images": local_urls,
-            "image_items": local_items,
             "timestamp": time.time(),
             "type": "online",
             "model": "",
@@ -12322,9 +13909,9 @@ async def update_project(project_id: str, payload: ProjectUpdateRequest):
     projects = ensure_default_project()
     target = next((p for p in projects if p.get("id") == project_id), None)
     if not target:
-        raise HTTPException(status_code=404, detail="项目不存在")
+        raise HTTPException(status_code=404, detail="?????")
     if payload.name is not None:
-        target["name"] = (str(payload.name).strip() or target.get("name") or "未命名项目")[:60]
+        target["name"] = (str(payload.name).strip() or target.get("name") or "?????")[:60]
     if payload.order is not None:
         target["order"] = int(payload.order)
     target["updated_at"] = now_ms()
@@ -12333,15 +13920,14 @@ async def update_project(project_id: str, payload: ProjectUpdateRequest):
 
 @app.delete("/api/projects/{project_id}")
 async def delete_project(project_id: str):
-    """删除项目：默认项目不可删除；其余项目删除后，其下画布回归默认项目（不删画布）。"""
+    """???????????????????????????????????????"""
     if project_id == DEFAULT_PROJECT_ID:
-        raise HTTPException(status_code=400, detail="默认项目不可删除")
+        raise HTTPException(status_code=400, detail="????????")
     projects = ensure_default_project()
     if not any(p.get("id") == project_id for p in projects):
-        raise HTTPException(status_code=404, detail="项目不存在")
+        raise HTTPException(status_code=404, detail="?????")
     projects = [p for p in projects if p.get("id") != project_id]
     save_projects(projects)
-    # 把该项目下的画布迁回默认项目
     moved = 0
     with CANVAS_LOCK:
         for filename in os.listdir(CANVAS_DIR):

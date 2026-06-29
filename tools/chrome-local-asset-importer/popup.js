@@ -1103,7 +1103,7 @@ async function importSelected(){
 function safeFolderName(value){
   return String(value || '网页采集')
     .split(/[\\/]+/)
-    .map(part => part.replace(/[<>:"|?* -]/g, '_').replace(/^\.+$/, '_').trim())
+    .map(part => part.replace(/[<>:"|?*-]/g, '_').replace(/^\.+$/, '_').trim())
     .filter(Boolean)
     .join('/') || '网页采集';
 }
@@ -1126,7 +1126,7 @@ function extFromContentType(ct){
 function downloadFileName(item, contentType){
   let base = imageName(item.url);
   const hasExt = /\.[a-z0-9]{2,5}$/i.test(base);
-  base = base.replace(/[<>:"|?*\\/ -]/g, '_').slice(0, 80) || 'web-media';
+  base = base.replace(/[<>:"|?*\\/-]/g, '_').slice(0, 80) || 'web-media';
   if(hasExt) return base;
   const ext = extFromContentType(contentType) || ((item.kind || mediaKindFromUrl(item.url)) === 'video' ? '.mp4' : '.jpg');
   return base + ext;
