@@ -1724,3 +1724,5 @@ body.studio-theme-dark .comfy-random-btn.active,
 .angle-mode-hint { margin-left:auto; color:rgba(255,255,255,.42); font-size:10.5px; font-weight:600; }
 .angle-cube-stage { touch-action:none; user-select:none; }
 .light-stage { touch-action:none; user-select:none; }
+.marker-effect-badge { display:inline-flex; align-items:center; justify-content:center; height:20px; max-width:88px; padding:0 7px; border-radius:999px; background:rgba(34,197,94,.12); color:#16a34a; border:1px solid rgba(34,197,94,.24); font-size:10px; font-weight:900; line-height:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+body.theme-dark .marker-effect-badge, .theme-dark .marker-effect-badge { background:rgba(34,197,94,.18); color:#86efac; border-color:rgba(134,239,172,.26); }

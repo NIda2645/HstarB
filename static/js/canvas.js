@@ -1,4 +1,4 @@
-﻿function refreshIcons(){ if(window.lucide) lucide.createIcons(); }
+function refreshIcons(){ if(window.lucide) lucide.createIcons(); }
 refreshIcons();
 function tr(key){ return window.StudioI18n ? StudioI18n.t(key) : key; }
 function trf(key, values={}){
@@ -6480,6 +6480,7 @@ function render(){
     refreshIcons();
     refreshOutputTimer();
     refreshControllerEffectBadges();
+    refreshMarkerEffectBadges();
 }
 function refreshNodes(ids=[]){
     const uniqueIds = [...new Set((ids || []).filter(Boolean))];
@@ -6505,6 +6506,7 @@ function refreshNodes(ids=[]){
     refreshIcons();
     refreshOutputTimer();
     refreshControllerEffectBadges();
+    refreshMarkerEffectBadges();
 }
 function refreshRunNodes(node, out=null){
     refreshNodes([node?.id, out?.id]);
@@ -12496,6 +12498,7 @@ function refreshControllerDownstream(){
         syncGeneratorInputs();
         refreshGeneratorInputViews();
         refreshControllerEffectBadges();
+        refreshMarkerEffectBadges();
     });
 }
 function directlyConnectedControllerLabel(node){
@@ -12503,6 +12506,27 @@ function directlyConnectedControllerLabel(node){
     const labels = upstream.flatMap(ctrl => enabledControllerLabels(ctrl));
     const unique = [...new Set(labels)];
     return unique.length ? `${unique.join('/')}控制器已生效` : '';
+}
+function sourceHasUsableMarkers(source){
+    return (source?.refs || []).some(ref => (ref?.markers || []).some(promptMarkerIsUsable));
+}
+function generatorHasActiveMarkers(gen){
+    if(!gen || !CANVAS_GENERATOR_TYPES.includes(gen.type)) return false;
+    return orderedSources(gen, generatorSources(gen)).some(sourceHasUsableMarkers);
+}
+function refreshMarkerEffectBadges(){
+    nodes.forEach(node => {
+        const el = nodesEl.querySelector(`.node[data-id="${CSS.escape(node.id)}"]`);
+        if(!el) return;
+        el.querySelector('.node-marker-effect-badge')?.remove();
+        if(!generatorHasActiveMarkers(node)) return;
+        const actions = el.querySelector('.node-head > div:last-child');
+        if(!actions) return;
+        const badge = document.createElement('span');
+        badge.className = 'marker-effect-badge node-marker-effect-badge';
+        badge.textContent = '标记已生效';
+        actions.prepend(badge);
+    });
 }
 function refreshControllerEffectBadges(){
     nodes.forEach(node => {

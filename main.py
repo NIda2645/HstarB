@@ -1597,8 +1597,7 @@ def sync_static_html_versions():
     safe_version = urllib.parse.quote(version, safe="._-")
     try:
         for name in os.listdir(STATIC_DIR):
-            # 跳过 macOS 在外置硬盘(ExFAT/NTFS)生成的 ._* Apple Double 元数据文件，
-            # 这些是二进制文件，按 UTF-8 读取会抛 UnicodeDecodeError。
+            # Skip macOS AppleDouble metadata files such as ._* on external disks.
             if name.startswith("._"):
                 continue
             if not name.lower().endswith(".html"):
@@ -1606,7 +1605,7 @@ def sync_static_html_versions():
             path = os.path.join(STATIC_DIR, name)
             if not os.path.isfile(path):
                 continue
-            # 单文件容错：某个文件读写失败不应中断整批同步。
+            # Keep one malformed HTML file from interrupting the whole sync pass.
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     old = f.read()
@@ -1615,9 +1614,9 @@ def sync_static_html_versions():
                     with open(path, "w", encoding="utf-8", newline="") as f:
                         f.write(new)
             except Exception as e:
-                print(f"同步静态页面版本号失败({name}): {e}")
+                print(f"Failed to sync static HTML version ({name}): {e}")
     except Exception as e:
-        print(f"同步静态页面版本号失败: {e}")
+        print(f"Failed to sync static HTML versions: {e}")
 
 def static_html_response(filename: str):
     path = os.path.join(STATIC_DIR, filename)
@@ -11288,6 +11287,7 @@ async def move_local_assets(payload: dict, request: Request):
     tree, items = _local_upload_tree_and_items()
     return {"ok": True, "moved": moved, "items": items, "tree": tree}
 
+@app.post("/api/image-marker/identify")
 async def identify_image_marker(payload: ImageMarkerIdentifyRequest):
     provider_id = payload.provider or "comfly"
     chat_base, chat_hdrs, resolved_model = resolve_chat_provider(provider_id, payload.model, payload.ms_model)

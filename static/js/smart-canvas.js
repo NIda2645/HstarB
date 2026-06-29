@@ -7393,7 +7393,7 @@ function render(){
         const deleteBtn = `<button class="mini-x node-delete" type="button" title="${escapeHtml(tr('smart.deleteNode'))}"><i data-lucide="trash-2"></i></button>`;
         const hint = isPending ? escapeHtml(tr('smart.hintPending')) : (imgs.length > 1 ? escapeHtml(tr('smart.hintMulti')) : imgs.length ? escapeHtml(tr('smart.hintSingle')) : escapeHtml(tr('smart.hintEmpty')));
         const html = `<div class="image-node ${isEmpty ? 'empty-node' : ''} ${isGroup ? 'group-node' : ''} ${isHistory ? 'history-group-node' : ''} ${isPrompt ? 'prompt-smart-node' : ''} ${isLoop ? 'loop-smart-node' : ''} ${isController ? 'controller-node smart-controller-node' : ''} ${isNodeSelected(node.id) ? 'selected' : ''} ${(dragState?.groupIds?.includes(node.id) || dragState?.id === node.id) ? 'dragging' : ''} ${node.running ? 'node-running' : ''} ${isPending ? 'node-pending' : ''}" data-id="${escapeHtml(node.id)}" style="left:${node.x || 0}px;top:${node.y || 0}px;width:${layout.width}px;height:${layout.height}px">
-            <div class="node-head"><div class="node-title">${title}</div><div class="node-actions">${deleteBtn}</div></div>
+            <div class="node-head"><div class="node-title">${title}</div><div class="node-actions">${markerEffectBadgeHtml(node)}${deleteBtn}</div></div>
             ${!isEmpty ? `<div class="floating-node-actions"><button class="mini-x node-delete" type="button" title="${escapeHtml(tr('smart.deleteNode'))}"><i data-lucide="trash-2"></i></button></div>` : ''}
             ${runTimePillHtml(node)}
             <div class="node-body">${body}</div>
@@ -7456,7 +7456,7 @@ function render(){
         const body = nodeBodyHtml(node, layout);
         const deleteBtn = `<button class="mini-x node-delete" type="button" title="${escapeHtml(tr('smart.deleteNode'))}"><i data-lucide="trash-2"></i></button>`;
         return `<div class="image-node ${isEmpty ? 'empty-node' : ''} ${isGroup ? 'group-node' : ''} ${isPrompt ? 'prompt-smart-node' : ''} ${isLoop ? 'loop-smart-node' : ''} ${isNodeSelected(node.id) ? 'selected' : ''} ${(dragState?.groupIds?.includes(node.id) || dragState?.id === node.id) ? 'dragging' : ''} ${node.running ? 'node-running' : ''} ${isPending ? 'node-pending' : ''}" data-id="${escapeHtml(node.id)}" style="left:${node.x || 0}px;top:${node.y || 0}px;width:${layout.width}px;height:${layout.height}px">
-            <div class="node-head"><div class="node-title">${title}</div><div class="node-actions">${deleteBtn}</div></div>
+            <div class="node-head"><div class="node-title">${title}</div><div class="node-actions">${markerEffectBadgeHtml(node)}${deleteBtn}</div></div>
             ${!isEmpty ? `<div class="floating-node-actions"><button class="mini-x node-delete" type="button" title="${escapeHtml(tr('smart.deleteNode'))}"><i data-lucide="trash-2"></i></button></div>` : ''}
             ${runTimePillHtml(node)}
             <div class="node-body">${body}</div>
@@ -11647,6 +11647,14 @@ function smartMarkerCandidatesForNode(node){
         });
     });
     return items;
+}
+function smartNodeHasActiveMarkers(node){
+    if(!node || !isSmartImageNode(node) || isHistoryGroupNode(node)) return false;
+    const refs = defaultInputImagesFor(node, false, smartLoopContext);
+    return Boolean(smartPromptMarkerReferenceDirective(refs));
+}
+function markerEffectBadgeHtml(node){
+    return smartNodeHasActiveMarkers(node) ? '<span class="marker-effect-badge node-marker-effect-badge">标记已生效</span>' : '';
 }
 function smartPromptMarkerReferenceDirective(refs=[]){
     const lines = [];
